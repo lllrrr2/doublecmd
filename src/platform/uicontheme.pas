@@ -4,7 +4,7 @@
     Simple implementation of Icon Theme based on FreeDesktop.org specification
     (http://standards.freedesktop.org/icon-theme-spec/icon-theme-spec-latest.html)
 
-    Copyright (C) 2009-2017 Alexander Koblov (alexx2000@mail.ru)
+    Copyright (C) 2009-2024 Alexander Koblov (alexx2000@mail.ru)
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -78,7 +78,7 @@ type
     function LookupIcon(AIconName: String; AIconSize, AIconScale: Integer): String;
     function CreateParentTheme(const sThemeName: String): TIconTheme; virtual;
   public
-    constructor Create(sThemeName: String; BaseDirList: array of String; ADefaultTheme: String = ''); virtual;
+    constructor Create(sThemeName: String; var BaseDirList: array of String; ADefaultTheme: String = ''); virtual;
     destructor Destroy; override;
     function Load: Boolean; virtual;
     function FindIcon(AIconName: String; AIconSize: Integer; AIconScale: Integer = 1): String;
@@ -165,14 +165,13 @@ begin
 end;
 
 
-constructor TIconTheme.Create(sThemeName: String; BaseDirList: array of String;
+constructor TIconTheme.Create(sThemeName: String; var BaseDirList: array of String;
   ADefaultTheme: String);
 var
  I, J: Integer;
  sElement: String;
 begin
   FTheme:= sThemeName;
-  FInherits:= nil;
   FDefaultTheme:= ADefaultTheme;
   FOwnsInheritsObject:= False;
   FDirectories:= nil;
@@ -194,22 +193,12 @@ begin
 end;
 
 destructor TIconTheme.Destroy;
-var
-  I: Integer;
 begin
-  if FOwnsInheritsObject and Assigned(FInherits) then
-    begin
-      for I:= FInherits.Count - 1 downto 0 do
-        begin
-          if Assigned(FInherits.Objects[I]) then
-            begin
-              TIconTheme(FInherits.Objects[I]).Free;
-              FInherits.Objects[I]:= nil;
-            end;
-        end;
-      FreeThenNil(FInherits);
-    end;
-  FreeThenNil(FDirectories);
+  if FOwnsInheritsObject then
+  begin
+    FInherits.Free;
+  end;
+  FreeAndNil(FDirectories);
   inherited Destroy;
 end;
 
@@ -261,6 +250,7 @@ begin
    else // new theme
      begin
        FInherits:= TStringList.Create;
+       FInherits.OwnsObjects:= True;
        FOwnsInheritsObject:= True;
      end;
 
@@ -295,17 +285,16 @@ end;
 
 procedure TIconTheme.LoadParentTheme(AThemeName: String);
 var
-  I: Integer;
+  Index: Integer;
   ATheme: TIconTheme;
 begin
-  if FInherits.IndexOf(AThemeName) < 0 then
+  if (FTheme <> AThemeName) and (FInherits.IndexOf(AThemeName) < 0) then
     begin
       ATheme:= CreateParentTheme(AThemeName);
-      I:= FInherits.AddObject(AThemeName, ATheme);
+      Index:= FInherits.AddObject(AThemeName, ATheme);
       if not ATheme.LoadThemeWithInherited(FInherits) then
         begin
-          ATheme.Free;
-          FInherits.Delete(I);
+          FInherits.Delete(Index);
         end;
     end;
 end;

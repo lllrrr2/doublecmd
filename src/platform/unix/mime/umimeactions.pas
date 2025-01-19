@@ -550,7 +550,7 @@ begin
     on E: Exception do
     begin
       Result:= nil;
-      WriteLn('GetDesktopEntry: ', E.Message);
+      DCDebug('GetDesktopEntry: ', E.Message);
     end;
   end;
 end;
@@ -593,7 +593,7 @@ begin
     SplitCmdLine(CustomFile, Value, Args);
     CustomFile:= 'dc_' + ExtractFileName(Value) + '_';
     CustomFile:= UserDataDir + PathDelim + CustomFile;
-    CustomFile:= GetTempName(CustomFile) + '.desktop';
+    CustomFile:= GetTempName(CustomFile, 'desktop');
     try
       DesktopFile:= TIniFileEx.Create(CustomFile, fmCreate or fmOpenReadWrite);
       try

@@ -3,7 +3,7 @@
    -------------------------------------------------------------------------
    Push some useful functions to Lua
 
-   Copyright (C) 2016-2021 Alexander Koblov (alexx2000@mail.ru)
+   Copyright (C) 2016-2023 Alexander Koblov (alexx2000@mail.ru)
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
@@ -39,7 +39,10 @@ uses
   Forms, Dialogs, Clipbrd, LazUTF8, LCLVersion, uLng, DCOSUtils,
   DCConvertEncoding, fMain, uFormCommands, uOSUtils, uGlobs, uLog,
   uClipboard, uShowMsg, uLuaStd, uFindEx, uConvEncoding, uFileProcs,
-  uFilePanelSelect, uMasks, LazFileUtils;
+  uFilePanelSelect, uMasks, LazFileUtils, Character, UnicodeData,
+  DCBasicTypes, Variants, uFile, uFileProperty, uFileSource,
+  uFileSourceProperty, uFileSourceUtil, uFileSystemFileSource,
+  uDefaultFilePropertyFormatter, DCDateTimeUtils, uShellExecute;
 
 procedure luaPushSearchRec(L : Plua_State; Rec: PSearchRecEx);
 begin
@@ -51,7 +54,7 @@ begin
   lua_setfield(L, -2, 'Size');
   lua_pushinteger(L, Rec^.Attr);
   lua_setfield(L, -2, 'Attr');
-  lua_pushstring(L, PAnsiChar(Rec^.Name));
+  lua_pushstring(L, Rec^.Name);
   lua_setfield(L, -2, 'Name');
 end;
 
@@ -138,6 +141,22 @@ function luaCreateDirectory(L : Plua_State) : Integer; cdecl;
 begin
   Result:= 1;
   lua_pushboolean(L, mbForceDirectory(lua_tostring(L, 1)));
+end;
+
+function luaRemoveDirectory(L : Plua_State) : Integer; cdecl;
+var
+  sDir: String;
+  Res: Boolean = True;
+begin
+  Result:= 1;
+  sDir:= lua_tostring(L, 1);
+  if mbDirectoryExists(sDir) then
+  begin
+    DelTree(sDir);
+    if mbDirectoryExists(sDir) then
+      Res:= False;
+  end;
+  lua_pushboolean(L, Res);
 end;
 
 function luaCreateHardLink(L : Plua_State) : Integer; cdecl;
@@ -260,6 +279,49 @@ begin
   lua_pushstring(L, CreateRelativePath(FileName, BaseDir));
 end;
 
+function luaGetTempName(L : Plua_State) : Integer; cdecl;
+begin
+  Result:= 1;
+  lua_pushstring(L, GetTempName(GetTempFolderDeletableAtTheEnd));
+end;
+
+function utf8_next(L: Plua_State): Integer; cdecl;
+var
+  S: String;
+  C: Integer;
+  Len: size_t;
+  P: PAnsiChar;
+  Index: Integer;
+begin
+  P:= lua_tolstring(L, lua_upvalueindex(1), @Len);
+  Index:= lua_tointeger(L, lua_upvalueindex(2));
+  if (Index >= Integer(Len)) then Exit(0);
+
+  P:= P + Index;
+  C:= UTF8CodepointSize(P);
+
+  // Partial UTF-8 character
+  if (Index + C) > Len then Exit(0);
+
+  SetString(S, P, C);
+
+  lua_pushinteger(L, Index + C);
+  lua_replace(L, lua_upvalueindex(2));
+
+  lua_pushinteger(L, Index + 1);
+  lua_pushstring(L, S);
+
+  Result:= 2;
+end;
+
+function luaNext(L : Plua_State) : Integer; cdecl;
+begin
+  lua_pushvalue(L, 1);
+  lua_pushnumber(L, 0);
+  lua_pushcclosure(L, @utf8_next, 2);
+  Result:= 1;
+end;
+
 function luaPos(L : Plua_State) : Integer; cdecl;
 var
   Offset: SizeInt = 1;
@@ -268,7 +330,7 @@ begin
   Result:= 1;
   Search:= lua_tostring(L, 1);
   Source:= lua_tostring(L, 2);
-  if lua_isinteger(L, 3) then begin
+  if lua_isnumber(L, 3) then begin
     Offset:= lua_tointeger(L, 3)
   end;
   lua_pushinteger(L, UTF8Pos(Search, Source, Offset));
@@ -284,7 +346,7 @@ begin
   Start:= lua_tointeger(L, 2);
   Count:= lua_tointeger(L, 3);
   S:= UTF8Copy(S, Start, Count);
-  lua_pushstring(L, PAnsiChar(S));
+  lua_pushstring(L, S);
 end;
 
 function luaLength(L : Plua_State) : Integer; cdecl;
@@ -300,7 +362,7 @@ begin
   Result:= 1;
   S:= lua_tostring(L, 1);
   S:= UTF8UpperCase(S);
-  lua_pushstring(L, PAnsiChar(S));
+  lua_pushstring(L, S);
 end;
 
 function luaLowerCase(L : Plua_State) : Integer; cdecl;
@@ -310,7 +372,7 @@ begin
   Result:= 1;
   S:= lua_tostring(L, 1);
   S:= UTF8LowerCase(S);
-  lua_pushstring(L, PAnsiChar(S));
+  lua_pushstring(L, S);
 end;
 
 function luaConvertEncoding(L : Plua_State) : Integer; cdecl;
@@ -324,6 +386,113 @@ begin
   lua_pushstring(L, ConvertEncoding(S, FromEnc, ToEnc));
 end;
 
+function luaDetectEncoding(L : Plua_State) : Integer; cdecl;
+var
+  S: String;
+begin
+  Result:= 1;
+  S:= lua_tostring(L, 1);
+  lua_pushstring(L, DetectEncoding(S));
+end;
+
+function char_prepare(L : Plua_State; out Index: Integer): UnicodeString;
+var
+  Len: size_t;
+  P: PAnsiChar;
+begin
+  P:= lua_tolstring(L, 1, @Len);
+  Result:= UTF8ToUTF16(P, Len);
+  if lua_isnumber(L, 2) then
+    Index:= Integer(lua_tointeger(L, 2))
+  else begin
+    Index:= 1;
+  end;
+end;
+
+function luaIsLower(L : Plua_State) : Integer; cdecl;
+var
+  Index: Integer;
+  S: UnicodeString;
+begin
+  S:= char_prepare(L, Index);
+  try
+    lua_pushboolean(L, TCharacter.IsLower(S, Index));
+    Result:= 1;
+  except
+    Result:= 0;
+  end;
+end;
+
+function luaIsUpper(L : Plua_State) : Integer; cdecl;
+var
+  Index: Integer;
+  S: UnicodeString;
+begin
+  S:= char_prepare(L, Index);
+  try
+    lua_pushboolean(L, TCharacter.IsUpper(S, Index));
+    Result:= 1;
+  except
+    Result:= 0;
+  end;
+end;
+
+function luaIsDigit(L : Plua_State) : Integer; cdecl;
+var
+  Index: Integer;
+  S: UnicodeString;
+begin
+  S:= char_prepare(L, Index);
+  try
+    lua_pushboolean(L, TCharacter.IsDigit(S, Index));
+    Result:= 1;
+  except
+    Result:= 0;
+  end;
+end;
+
+function luaIsLetter(L : Plua_State) : Integer; cdecl;
+var
+  Index: Integer;
+  S: UnicodeString;
+begin
+  S:= char_prepare(L, Index);
+  try
+    lua_pushboolean(L, TCharacter.IsLetter(S, Index));
+    Result:= 1;
+  except
+    Result:= 0;
+  end;
+end;
+
+function luaIsLetterOrDigit(L : Plua_State) : Integer; cdecl;
+var
+  Index: Integer;
+  S: UnicodeString;
+begin
+  S:= char_prepare(L, Index);
+  try
+    lua_pushboolean(L, TCharacter.IsLetterOrDigit(S, Index));
+    Result:= 1;
+  except
+    Result:= 0;
+  end;
+end;
+
+function luaGetUnicodeCategory(L : Plua_State) : Integer; cdecl;
+var
+  Index: Integer;
+  S: UnicodeString;
+begin
+  S:= char_prepare(L, Index);
+  try
+    lua_pushinteger(L, lua_Integer(TCharacter.GetUnicodeCategory(S, Index)));
+    Result:= 1;
+  except
+    Result:= 0;
+  end;
+end;
+
 function luaClipbrdClear(L : Plua_State) : Integer; cdecl;
 begin
   Result:= 0;
@@ -333,7 +502,7 @@ end;
 function luaClipbrdGetText(L : Plua_State) : Integer; cdecl;
 begin
   Result:= 1;
-  lua_pushstring(L, PAnsiChar(Clipboard.AsText));
+  lua_pushstring(L, Clipboard.AsText);
 end;
 
 function luaClipbrdSetText(L : Plua_State) : Integer; cdecl;
@@ -377,7 +546,7 @@ begin
   if AMaskInput then
   begin
     Result:= 2;
-    lua_pushstring(L, PAnsiChar(AValue));
+    lua_pushstring(L, AValue);
   end;
 end;
 
@@ -408,7 +577,11 @@ begin
     AValue:= lua_tostring(L, 4);
   end;
   if ShowInputListBox(ACaption, APrompt, AStringList, AValue, AIndex) then
-    lua_pushstring(L, PAnsiChar(AValue))
+  begin
+    Result:= 2;
+    lua_pushstring(L, AValue);
+    lua_pushinteger(L, AIndex + 1);
+  end
   else begin
     lua_pushnil(L);
   end;
@@ -470,6 +643,202 @@ begin
     frmMain.SetActiveFrame(TFilePanelSelect(lua_tointeger(L, 1)));
 end;
 
+function luaExpandEnv(L : Plua_State) : Integer; cdecl;
+var
+  S: String;
+  Special: Boolean = False;
+begin
+  Result:= 1;
+  S:= lua_tostring(L, 1);
+  if lua_isboolean(L, 2) then
+    Special:= lua_toboolean(L, 2);
+  if Special then
+    lua_pushstring(L, ReplaceEnvVars(S))
+  else begin
+    lua_pushstring(L, mbExpandEnvironmentStrings(S));
+  end;
+end;
+
+function luaExpandVar(L : Plua_State) : Integer; cdecl;
+var
+  S: String;
+begin
+  Result:= 1;
+  S:= lua_tostring(L, 1);
+  lua_pushstring(L, ReplaceVarParams(S));
+end;
+
+function luaFileSetTime(L : Plua_State) : Integer; cdecl;
+var
+  sFile: String;
+  ModificationTime, CreationTime, LastAccessTime: DCBasicTypes.TFileTime;
+begin
+  Result:= 1;
+  sFile:= lua_tostring(L, 1);
+
+  ModificationTime:= UnixFileTimeToFileTime(lua_tointeger(L, 2));
+  CreationTime:= UnixFileTimeToFileTime(lua_tointeger(L, 3));
+  LastAccessTime:= UnixFileTimeToFileTime(lua_tointeger(L, 4));
+
+  lua_pushboolean(L, mbFileSetTime(sFile, ModificationTime, CreationTime, LastAccessTime));
+end;
+
+function luaGetFileProperty(L : Plua_State) : Integer; cdecl;
+var
+  AFile: TFile;
+  AFileSource: IFileSource;
+  AValue: Variant;
+  FilePropertiesNeeded: TFilePropertiesTypes;
+  AIndex: Integer;
+const
+  FileFuncToProp: array [0..9] of TFilePropertiesTypes = ([fpSize], [fpAttributes], [fpOwner], [fpOwner],
+      [fpModificationTime], [fpCreationTime], [fpLastAccessTime], [fpChangeTime], [fpType], [fpComment]);
+begin
+  Result:= 1;
+  if lua_isnumber(L, 2) then
+  begin
+    AIndex:= lua_tointeger(L, 2);
+    if AIndex < 10 then
+    begin
+      try
+        AFile := TFileSystemFileSource.CreateFileFromFile(lua_tostring(L, 1));
+      except
+        lua_pushnil(L);
+        Exit;
+      end;
+      AFileSource := TFileSystemFileSource.GetFileSource;
+      // Retrieve additional properties if needed
+      FilePropertiesNeeded:= FileFuncToProp[AIndex];
+      if AFileSource.CanRetrieveProperties(AFile, FilePropertiesNeeded) then
+        AFileSource.RetrieveProperties(AFile, FilePropertiesNeeded, []);
+      case AIndex of
+        0: // fsfSize
+          begin
+            if fpSize in AFile.SupportedProperties then
+            begin
+              if AFile.SizeProperty.IsValid then
+                AValue := AFile.Size;
+            end;
+          end;
+        1: // fsfAttr
+          if fpAttributes in AFile.SupportedProperties then
+            AValue := AFile.Properties[fpAttributes].Format(DefaultFilePropertyFormatter);
+        2: // fsfGroup
+          if fpOwner in AFile.SupportedProperties then
+            AValue := AFile.OwnerProperty.GroupStr;
+        3: // fsfOwner
+          if fpOwner in AFile.SupportedProperties then
+            AValue := AFile.OwnerProperty.OwnerStr;
+        4: // fsfModificationTime
+          if fpModificationTime in AFile.SupportedProperties then
+          begin
+            if AFile.ModificationTimeProperty.IsValid then
+              AValue := DateTimeToUnixFileTime(AFile.ModificationTime);
+          end;
+        5: // fsfCreationTime
+          if fpCreationTime in AFile.SupportedProperties then
+            AValue := DateTimeToUnixFileTime(AFile.CreationTime);
+        6: // fsfLastAccessTime
+          if fpLastAccessTime in AFile.SupportedProperties then
+            AValue := DateTimeToUnixFileTime(AFile.LastAccessTime);
+        7: // fsfChangeTime
+          if fpChangeTime in AFile.SupportedProperties then
+            AValue := DateTimeToUnixFileTime(AFile.ChangeTime);
+        8: // fsfType
+          if fpType in AFile.SupportedProperties then
+            AValue := AFile.TypeProperty.Format(DefaultFilePropertyFormatter);
+        9: // fsfComment:
+          if fpComment in AFile.SupportedProperties then
+            AValue := AFile.CommentProperty.Format(DefaultFilePropertyFormatter);
+      end;
+      FreeAndNil(AFile);
+    end;
+  end;
+  case VarType(AValue) of
+    varInteger,
+    varInt64:
+      lua_pushinteger(L, Int64(AValue));
+    varString:
+      lua_pushstring(L, AValue);
+  else
+    lua_pushnil(L);
+  end;
+end;
+
+function luaGetPluginField(L : Plua_State) : Integer; cdecl;
+var
+  AFile: TFile;
+  AFileSource: IFileSource;
+  AValue: Variant;
+  AName: String;
+  FieldIndex, UnitIndex: Integer;
+begin
+  Result:= 1;
+  try
+    AFile := TFileSystemFileSource.CreateFileFromFile(lua_tostring(L, 1));
+  except
+    lua_pushnil(L);
+    Exit;
+  end;
+  AName := upcase(lua_tostring(L, 2));
+  FieldIndex := lua_tointeger(L, 3);
+  UnitIndex := lua_tointeger(L, 4);
+  AFileSource := TFileSystemFileSource.GetFileSource;
+  if fspDirectAccess in AFileSource.Properties then
+  begin
+    if not gWdxPlugins.IsLoaded(AName) then
+    begin
+      if not gWdxPlugins.LoadModule(AName) then
+      begin
+        lua_pushnil(L);
+        FreeAndNil(AFile);
+        Exit;
+      end;
+    end;
+    if gWdxPlugins.GetWdxModule(AName).FileParamVSDetectStr(AFile) then
+    begin
+      AValue := gWdxPlugins.GetWdxModule(AName).CallContentGetValueV(
+        AFile.FullPath, FieldIndex, UnitIndex, 0);
+    end;
+  end;
+  FreeAndNil(AFile);
+  case VarType(AValue) of
+    varBoolean:
+      lua_pushboolean(L, AValue);
+    varInteger,
+    varInt64:
+      lua_pushinteger(L, Int64(AValue));
+    varDouble:
+      lua_pushnumber(L, Double(AValue));
+    varDate:
+      lua_pushinteger(L, DateTimeToUnixFileTime(AValue));
+    varString:
+      lua_pushstring(L, AValue);
+  else
+    lua_pushnil(L);
+  end;
+end;
+
+function luaGoToFile(L : Plua_State) : Integer; cdecl;
+var
+  sFilePath: String;
+  bActive: Boolean = True;
+begin
+  Result:= 0;
+  sFilePath:= lua_tostring(L, 1);
+  if lua_isboolean(L, 2) then
+    bActive:= lua_toboolean(L, 2);
+  if bActive then
+  begin
+    SetFileSystemPath(frmMain.ActiveFrame, ExtractFilePath(sFilePath));
+    frmMain.ActiveFrame.SetActiveFile(ExtractFileName(sFilePath));
+  end
+  else begin
+    SetFileSystemPath(frmMain.NotActiveFrame, ExtractFilePath(sFilePath));
+    frmMain.NotActiveFrame.SetActiveFile(ExtractFileName(sFilePath));
+  end;
+end;
+
 procedure luaP_register(L : Plua_State; n : PChar; f : lua_CFunction);
 begin
   lua_pushcfunction(L, f);
@@ -494,6 +863,7 @@ begin
     luaP_register(L, 'GetTickCount', @luaGetTickCount);
     luaP_register(L, 'DirectoryExists', @luaDirectoryExists);
     luaP_register(L, 'CreateDirectory', @luaCreateDirectory);
+    luaP_register(L, 'RemoveDirectory', @luaRemoveDirectory);
 
     luaP_register(L, 'CreateHardLink', @luaCreateHardLink);
     luaP_register(L, 'CreateSymbolicLink', @luaCreateSymbolicLink);
@@ -511,17 +881,33 @@ begin
     luaP_register(L, 'MatchesMask', @luaMatchesMask);
     luaP_register(L, 'MatchesMaskList', @luaMatchesMaskList);
 
+    luaP_register(L, 'ExpandEnv', @luaExpandEnv);
+    luaP_register(L, 'FileSetTime', @luaFileSetTime);
+    luaP_register(L, 'GetFileProperty', @luaGetFileProperty);
+    luaP_register(L, 'GetTempName', @luaGetTempName);
+
     luaC_register(L, 'PathDelim', PathDelim);
   lua_setglobal(L, 'SysUtils');
 
   lua_newtable(L);
     luaP_register(L, 'Pos', @luaPos);
+    luaP_register(L, 'Next', @luaNext);
     luaP_register(L, 'Copy', @luaCopy);
     luaP_register(L, 'Length', @luaLength);
     luaP_register(L, 'UpperCase', @luaUpperCase);
     luaP_register(L, 'LowerCase', @luaLowerCase);
     luaP_register(L, 'ConvertEncoding', @luaConvertEncoding);
+    luaP_register(L, 'DetectEncoding', @luaDetectEncoding);
   lua_setglobal(L, 'LazUtf8');
+
+  lua_newtable(L);
+    luaP_register(L, 'IsLower', @luaIsLower);
+    luaP_register(L, 'IsUpper', @luaIsUpper);
+    luaP_register(L, 'IsDigit', @luaIsDigit);
+    luaP_register(L, 'IsLetter', @luaIsLetter);
+    luaP_register(L, 'IsLetterOrDigit', @luaIsLetterOrDigit);
+    luaP_register(L, 'GetUnicodeCategory', @luaGetUnicodeCategory);
+  lua_setglobal(L, 'Char');
 
   lua_newtable(L);
     luaP_register(L, 'Clear', @luaClipbrdClear);
@@ -540,6 +926,9 @@ begin
     luaP_register(L, 'LogWrite', @luaLogWrite);
     luaP_register(L, 'CurrentPanel', @luaCurrentPanel);
     luaP_register(L, 'ExecuteCommand', @luaExecuteCommand);
+    luaP_register(L, 'ExpandVar', @luaExpandVar);
+    luaP_register(L, 'GetPluginField', @luaGetPluginField);
+    luaP_register(L, 'GoToFile', @luaGoToFile);
   lua_setglobal(L, 'DC');
 
   ReplaceLibrary(L);
@@ -555,14 +944,14 @@ begin
       APath := lua_tostring(L, -1);
       APath := StringReplace(APath, '.' + PathDelim, Path, []);
     lua_pop(L, 1);
-    lua_pushstring(L, PAnsiChar(APath));
+    lua_pushstring(L, APath);
     lua_setfield(L, -2, 'path');
     // Set package.cpath
     lua_getfield(L, -1, 'cpath');
       APath := lua_tostring(L, -1);
       APath := StringReplace(APath, '.' + PathDelim, Path, []);
     lua_pop(L, 1);
-    lua_pushstring(L, PAnsiChar(APath));
+    lua_pushstring(L, APath);
     lua_setfield(L, -2, 'cpath');
   lua_pop(L, 1);
 end;
@@ -619,7 +1008,7 @@ begin
       if (Count > 0) then
       begin
         for Index := 0 to Count - 1 do begin
-          lua_pushstring(L, PAnsiChar(Args[Index]));
+          lua_pushstring(L, Args[Index]);
         end;
       end;
       // Execute script

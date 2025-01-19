@@ -45,8 +45,9 @@ uses
   Classes, SysUtils, Controls, Forms, Grids, Types, uExts, uColorExt, Graphics,
   LCLVersion, DCClassesUtf8, uMultiArc, uColumns, uHotkeyManager, uSearchTemplate,
   uFileSourceOperationOptions, uWFXModule, uWCXModule, uWDXModule, uwlxmodule,
-  udsxmodule, DCXmlConfig, uInfoToolTip, fQuickSearch, uTypes, uClassesEx,
-  uHotDir, uSpecialDir, SynEdit, SynEditTypes, uFavoriteTabs, fTreeViewMenu, uConvEncoding;
+  udsxmodule, DCXmlConfig, uInfoToolTip, fQuickSearch, uTypes, uClassesEx, uColors,
+  uHotDir, uSpecialDir, SynEdit, SynEditTypes, uFavoriteTabs, fTreeViewMenu,
+  uConvEncoding, DCJsonConfig, uFileSourceOperationTypes;
 
 type
   { Configuration options }
@@ -172,7 +173,7 @@ type
 
 const
   { Default hotkey list version number }
-  hkVersion = 56;
+  hkVersion = 64;
   // 54 - In "Viewer" context, added the "W" for "cm_WrapText", "4" for "cm_ShowAsDec", "8" for "cm_ShowOffice".
   // 53 - In "Main" context, change shortcut "Alt+`" to "Alt+0" for the "cm_ActivateTabByIndex".
   // 52 - In "Main" context, add shortcut "Ctrl+Shift+B" for "cm_FlatViewSel".
@@ -209,7 +210,12 @@ const
   // 11  - During the last 2-3 years the default font for search result was set in file, not loaded and different visually than was was stored.
   // 12  - Split Behaviours/HeaderFooterSizeFormat to Behaviours/HeaderSizeFormat and Behaviours/FooterSizeFormat
   //       Loading a config prior of version 11 should ignore that setting and keep default.
-  ConfigVersion = 12;
+  // 13 -  Replace Configuration/UseConfigInProgramDir by doublecmd.inf
+  // 14 -  Move some colors to colors.json
+  // 15 -  Move custom columns colors to colors.json
+  ConfigVersion = 15;
+
+  COLORS_JSON = 'colors.json';
 
   // Configuration related filenames
   sMULTIARC_FILENAME = 'multiarc.ini';
@@ -246,6 +252,9 @@ var
   gPluginFilenameStyle: TConfigFilenameStyle = pfsAbsolutePath;
   gPluginPathToBeRelativeTo: string = '%COMMANDER_PATH%';
   
+  { Colors }
+  gColors: TColorThemes;
+
   { MultiArc addons }
   gMultiArcList: TMultiArcList;
 
@@ -260,6 +269,7 @@ var
   gDriveBar1,
   gDriveBar2,
   gDriveBarFlat,
+  gDriveBarSyncWidth,
   gDrivesListButton,
   gDirectoryTabs,
   gCurDir,
@@ -296,6 +306,7 @@ var
   gToolbarPathModifierElements: tToolbarPathModifierElements;
 
   gRepeatPassword:Boolean;  // repeat password when packing files
+  gMaxStringItems: Integer;
   gDirHistoryCount:Integer; // how many history we remember
   gShowSystemFiles:Boolean;
   gRunInTermStayOpenCmd: String;
@@ -312,9 +323,12 @@ var
   gUpdatedFilesPosition: TUpdatedFilesPosition;
   gLynxLike:Boolean;
   gFirstTextSearch: Boolean;
+
+  { File views page }
   gExtraLineSpan: Integer;
   gFolderPrefix,
   gFolderPostfix: String;
+  gRenameConfirmMouse: Boolean;
 
   { Mouse }
   gMouseSelectionEnabled: Boolean;
@@ -324,6 +338,7 @@ var
 
   gAutoFillColumns: Boolean;
   gAutoSizeColumn: Integer;
+  gColumnsLongInStatus : Boolean;
   gColumnsAutoSaveWidth: Boolean;
   gColumnsTitleStyle: TTitleStyle;
   gCustomColumnsChangeAllColumns: Boolean;
@@ -355,6 +370,7 @@ var
   glsVolumeSizeHistory : TStringListEx;
   glsIgnoreList : TStringListEx;
   gOnlyOneAppInstance,
+  gColumnsTitleLikeValues: Boolean;
   gCutTextToColWidth : Boolean;
   gExtendCellWidth : Boolean;
   gSpaceMovesDown: Boolean;
@@ -362,6 +378,7 @@ var
   gWheelScrollLines: Integer;
   gAlwaysShowTrayIcon: Boolean;
   gMinimizeToTray: Boolean;
+  gConfirmQuit: Boolean;
   gFileSizeFormat: TFileSizeFormat;
   gHeaderSizeFormat: TFileSizeFormat;
   gFooterSizeFormat: TFileSizeFormat;
@@ -420,38 +437,14 @@ var
 
   { File panels color page }
   gUseCursorBorder: Boolean;
-  gCursorBorderColor: TColor;
   gUseFrameCursor: Boolean;
-  gForeColor,  //text color
-  gBackColor, //Background color
-  gBackColor2, //Background color 2
-  gMarkColor,  // Mark color
-  gCursorColor, //Cursor color
-  gCursorText,  //text color under cursor
-  gInactiveCursorColor, //Inactive cursor color
-  gInactiveMarkColor: TColor; //Inactive Mark color
   gUseInvertedSelection: Boolean;
   gUseInactiveSelColor: Boolean;
   gAllowOverColor: Boolean;
   gBorderFrameWidth :integer;
 
-  gPathActiveColor,
-  gPathActiveFontColor,
-  gPathInactiveColor,
-  gPathInactiveFontColor: TColor;
-
   gInactivePanelBrightness: Integer; // 0 .. 100 (black .. full color)
   gIndUseGradient : Boolean; // use gradient on drive label
-  gIndForeColor, // foreColor of use space on drive label
-  gIndBackColor: TColor; // backColor of free space on drive label
-
-  gLogInfoColor,
-  gLogErrorColor,
-  gLogSuccessColor: TColor;
-
-  gSyncLeftColor,
-  gSyncRightColor,
-  gSyncUnknownColor: TColor;
 
   gShowIcons: TShowIconsMode;
   gShowIconsNew: TShowIconsMode;
@@ -461,7 +454,6 @@ var
   gDiskIconsSize : Integer;
   gDiskIconsAlpha : Integer;
   gToolIconsSize: Integer;
-  gFiOwnDCIcon : PtrInt;
   gIconsExclude: Boolean;
   gIconsExcludeDirs: String;
   gPixelsPerInch: Integer;
@@ -492,6 +484,7 @@ var
   gShowCopyTabSelectPanel:boolean;
   gUseTrash : Boolean; // if using delete to trash by default
   gRenameSelOnlyName:boolean;
+  gDefaultDropEffect: Boolean;
   gShowDialogOnDragDrop: Boolean;
   gDragAndDropDesiredTextFormat:array[0..pred(NbOfDropTextFormat)] of tDesiredDropTextFormat;
   gDragAndDropAskFormatEachTime: Boolean;
@@ -501,6 +494,8 @@ var
   gAutoExtractOpenMask: String;
   gFileOperationsProgressKind: TFileOperationsProgressKind;
   gFileOperationsConfirmations: TFileOperationsConfirmations;
+  gFileOperationsSounds: array[TFileSourceOperationType] of String;
+  gFileOperationDuration: Integer;
 
   { Multi-Rename}
   gMulRenShowMenuBarOnTop : boolean;
@@ -554,6 +549,7 @@ var
   gInplaceRename,
   gInplaceRenameButton,
   gDblClickToParent,
+  gDblClickEditPath,
   gGoToRoot: Boolean;
   gShowCurDirTitleBar: Boolean;
   gActiveRight: Boolean;
@@ -619,40 +615,39 @@ var
   gCopyMovePath3,
   gCopyMovePath4,
   gCopyMovePath5: String;
-  gImageBackColor1,
-  gImageBackColor2: TColor;
   gImagePaintMode: TViewerPaintTool;
   gImagePaintWidth,
   gColCount,
   gViewerMode,
+  gMaxCodeSize,
   gMaxTextWidth,
   gTabSpaces : Integer;
   gImagePaintColor,
-  gBookBackgroundColor,
-  gBookFontColor: TColor;
   gTextPosition:PtrInt;
   gPrintMargins: TRect;
   gShowCaret: Boolean;
   gViewerWrapText: Boolean;
   gViewerLeftMargin: Integer;
   gViewerLineSpacing: Integer;
+  gViewerAutoCopy: Boolean;
+  gViewerSynEditMask: String;
+  gViewerJpegQuality: Integer;
 
   { Editor }
   gEditWaitTime: Integer;
   gEditorSynEditOptions: TSynEditorOptions;
   gEditorSynEditTabWidth,
-  gEditorSynEditRightEdge: Integer;
+  gEditorSynEditRightEdge,
+  gEditorSynEditBlockIndent: Integer;
+  gEditorFindWordAtCursor: Boolean;
 
   { Differ }
   gDifferIgnoreCase,
+  gDifferAutoCompare,
   gDifferKeepScrolling,
   gDifferLineDifferences,
   gDifferPaintBackground,
   gDifferIgnoreWhiteSpace: Boolean;
-  gDifferAddedColor: TColor;
-  gDifferDeletedColor: TColor;
-  gDifferModifiedColor: TColor;
-  gDifferModifiedBinaryColor: TColor;
 
   {SyncDirs}
   gSyncDirsSubdirs,
@@ -663,15 +658,19 @@ var
   gSyncDirsShowFilterCopyRight,
   gSyncDirsShowFilterEqual,
   gSyncDirsShowFilterNotEqual,
+  gSyncDirsShowFilterUnknown,
   gSyncDirsShowFilterCopyLeft,
   gSyncDirsShowFilterDuplicates,
   gSyncDirsShowFilterSingles: Boolean;
   gSyncDirsFileMask: string;
+  gSyncDirsFileMaskSave: Boolean;
+  gDateTimeFormatSync : String;
 
   { Internal Associations}
   gFileAssociationLastCustomAction: string;
   gOfferToAddToFileAssociations: boolean;
   gExtendedContextMenu: boolean;
+  gDefaultContextActions: boolean;
   gOpenExecuteViaShell: boolean;
   gExecuteViaTerminalClose: boolean;
   gExecuteViaTerminalStayOpen: boolean;
@@ -689,18 +688,6 @@ var
   gUseTreeViewMenuWithViewHistory: boolean;
   gUseTreeViewMenuWithCommandLineHistory: boolean;
   gTreeViewMenuUseKeyboardShortcut: boolean;
-  gTVMBackgroundColor: TColor;
-  gTVMShortcutColor: TColor;
-  gTVMNormalTextColor: TColor;
-  gTVMSecondaryTextColor: TColor;
-  gTVMFoundTextColor: TColor;
-  gTVMUnselectableTextColor: TColor;
-  gTVMCursorColor: TColor;
-  gTVMShortcutUnderCursor: TColor;
-  gTVMNormalTextUnderCursor: TColor;
-  gTVMSecondaryTextUnderCursor: TColor;
-  gTVMFoundTextUnderCursor: TColor;
-  gTVMUnselectableUnderCursor: TColor;
   gTreeViewMenuOptions: array [0..(ord(tvmcLASTONE)-2)] of TTreeViewMenuOptions;
   gTreeViewMenuShortcutExit: boolean;
   gTreeViewMenuSingleClickExit: boolean;
@@ -708,6 +695,10 @@ var
   crArrowCopy: Integer = 1;
   crArrowMove: Integer = 2;
   crArrowLink: Integer = 3;
+
+{$IF DEFINED(UNIX) AND NOT (DEFINED(DARWIN) OR DEFINED(HAIKU))}
+  gSystemItemProperties: Boolean = False;
+{$ENDIF}
 
   { TotalCommander Import/Export }
   {$IFDEF MSWINDOWS}
@@ -737,19 +728,20 @@ function GetValidDateTimeFormat(const aFormat, ADefaultFormat: string): string;
 
 procedure RegisterInitialization(InitProc: TProcedure);
 
-const
-  cMaxStringItems=50;
-  
 var
   gConfig: TXmlConfig = nil;
+  gStyles: TJsonConfig = nil;
+  DefaultDateTimeFormat: String;
+  DefaultDateTimeFormatSync: String;
 
 implementation
 
 uses
-   LCLProc, LCLType, Dialogs, Laz2_XMLRead, LazUTF8, uExifWdx, uSynDiffControls,
+   LCLProc, LCLType, Dialogs, Laz2_XMLRead, LazUTF8, LConvEncoding, uExifWdx,
    uGlobsPaths, uLng, uShowMsg, uFileProcs, uOSUtils, uFindFiles, uEarlyConfig,
-   uDCUtils, fMultiRename, uFile, uDCVersion, uDebug, uFileFunctions,
-   uDefaultPlugins, Lua, uKeyboard, DCOSUtils, DCStrUtils, uPixMapManager
+   dmHigh, uDCUtils, fMultiRename, uDCVersion, uDebug, uFileFunctions,
+   uDefaultPlugins, Lua, uKeyboard, DCOSUtils, DCStrUtils, uPixMapManager,
+   FileUtil, uSynDiffControls
    {$IF DEFINED(MSWINDOWS)}
     , ShlObj
    {$ENDIF}
@@ -766,11 +758,11 @@ type
   TLoadConfigProc = function(var ErrorMessage: String): Boolean;
 
 var
-  DefaultDateTimeFormat: String;
   // Double Commander version
   // loaded from configuration file
   gPreviousVersion: String = '';
   FInitList: array of TProcedure;
+  CustomDecimalSeparator: String = #$EF#$BF#$BD;
 
 function LoadConfigCheckErrors(LoadConfigProc: TLoadConfigProc;
                                ConfigFileName: String;
@@ -835,6 +827,20 @@ begin
   gConfig.Save;
 end;
 
+procedure SaveColorsConfig;
+begin
+  gColors.Save(gStyles.Root);
+  gColorExt.Save(gStyles.Root);
+  ColSet.SaveColors(gStyles.Root);
+  gHighlighters.SaveColors(gStyles.Root);
+  gStyles.SaveToFile(gpCfgDir + COLORS_JSON);
+end;
+
+procedure SaveHighlightersConfig;
+begin
+  gHighlighters.Save(gpCfgDir + HighlighterConfig);
+end;
+
 function AskUserOnError(var ErrorMessage: String): Boolean;
 begin
   // Show error messages.
@@ -868,6 +874,22 @@ begin
   Result := True;
 end;
 
+function LoadColorsConfig(var {%H-}ErrorMessage: String): Boolean;
+begin
+  gStyles.LoadFromFile(gpCfgDir + COLORS_JSON);
+  gColors.Load(gStyles.Root);
+  gColorExt.Load(gStyles.Root);
+  ColSet.LoadColors(gStyles.Root);
+  gHighlighters.LoadColors(gStyles.Root);
+  Result := True;
+end;
+
+function LoadHighlightersConfig(var {%H-}ErrorMessage: String): Boolean;
+begin
+  gHighlighters.Load(gpCfgDir + HighlighterConfig);
+  Result := True;
+end;
+
 function LoadMultiArcConfig(var {%H-}ErrorMessage: String): Boolean;
 begin
   gMultiArcList.LoadFromFile(gpCfgDir + sMULTIARC_FILENAME);
@@ -897,7 +919,7 @@ var
           if LoadObj then begin
             HistoryList.Objects[Idx]:= TObject(UIntPtr(History.GetAttr(Node, 'Tag', 0)));
           end;
-          if HistoryList.Count >= cMaxStringItems then Break;
+          if HistoryList.Count >= gMaxStringItems then Break;
         end;
         Node := Node.NextSibling;
       end;
@@ -951,7 +973,7 @@ var
       if SaveObj then begin
         History.SetAttr(SubNode, 'Tag', UInt32(UIntPtr(HistoryList.Objects[I])));
       end;
-      if I >= cMaxStringItems then Break;
+      if I >= gMaxStringItems then Break;
     end;
   end;
 
@@ -1021,10 +1043,28 @@ begin
   HMForm := HotMan.Forms.FindOrCreate('Main');
   with HMForm.Hotkeys do
     begin
-      AddIfNotExists(['F1'],[],'cm_About');
+      if HotMan.Version < 58 then
+      begin
+        HMHotKey:= FindByCommand('cm_About');
+        if Assigned(HMHotKey) and HMHotKey.SameShortcuts(['F1']) then
+        begin
+          Remove(HMHotKey);
+        end;
+      end;
+      if HotMan.Version < 63 then
+      begin
+        HMHotKey:= FindByCommand('cm_View');
+        if Assigned(HMHotKey) and HMHotKey.SameShortcuts(['F3']) then
+        begin
+          Remove(HMHotKey);
+        end;
+      end;
+
+      AddIfNotExists(['F1'],[],'cm_HelpIndex');
       AddIfNotExists(['F2','','',
                       'Shift+F6','',''],'cm_RenameOnly');
-      AddIfNotExists(['F3'],[],'cm_View');
+      AddIfNotExists(['F3','','',
+                      'Shift+F3','','cursor=1',''], 'cm_View');
       AddIfNotExists(['F4'],[],'cm_Edit');
       AddIfNotExists(['F5'],[],'cm_Copy');
       AddIfNotExists(['F6'],[],'cm_Rename');
@@ -1080,6 +1120,7 @@ begin
       AddIfNotExists(['Ctrl+PgDn'],[],'cm_OpenArchive');
       AddIfNotExists(['Ctrl+PgUp'],[],'cm_ChangeDirToParent');
       AddIfNotExists(['Ctrl+Alt+Enter'],[],'cm_ShellExecute');
+      AddIfNotExists(['Ctrl+Shift+A'],[],'cm_ShowTabsList');
       AddIfNotExists(['Ctrl+Shift+B'],[],'cm_FlatViewSel');
       AddIfNotExists(['Ctrl+Shift+C'],[],'cm_CopyFullNamesToClip');
       AddIfNotExists(['Ctrl+Shift+D'],[],'cm_ConfigDirHotList');
@@ -1144,6 +1185,8 @@ begin
         if Assigned(HMHotKey) and HMHotKey.SameShortcuts(['Ctrl+Z']) then
           Remove(HMHotKey);
       end;
+
+      AddIfNotExists(VK_K, [ssModifier], 'cm_MapNetworkDrive');
     end;
 
   HMControl := HMForm.Controls.FindOrCreate('Files Panel');
@@ -1182,11 +1225,25 @@ begin
       AddIfNotExists(['F1'],[],'cm_About');
       AddIfNotExists(['F2'],[],'cm_Reload');
 
+      if HotMan.Version < 60 then
+      begin
+        HMHotKey:= Find(['Right']);
+        if Assigned(HMHotKey) and (HMHotKey.Command = 'cm_LoadNextFile') then
+        begin
+          HMHotKey.Shortcuts[0]:= 'Alt+Right';
+        end;
+        HMHotKey:= Find(['Left']);
+        if Assigned(HMHotKey) and (HMHotKey.Command = 'cm_LoadPrevFile') then
+        begin
+          HMHotKey.Shortcuts[0]:= 'Alt+Left';
+        end;
+      end;
+
       AddIfNotExists(['N'   ,'','',
-                      'Right','',''],'cm_LoadNextFile'); //, ['N'], []);
+                      'Alt+Right','',''],'cm_LoadNextFile');
 
       AddIfNotExists(['P'   ,'','',
-                      'Left','',''],'cm_LoadPrevFile'); //, ['P'], []);
+                      'Alt+Left','',''],'cm_LoadPrevFile');
 
       if HotMan.Version < 54 then
       begin
@@ -1210,6 +1267,7 @@ begin
       AddIfNotExists(['6'],[],'cm_ShowGraphics');
       AddIfNotExists(['7'],[],'cm_ShowPlugins');
       AddIfNotExists(['8'],[],'cm_ShowOffice');
+      AddIfNotExists(['9'],[],'cm_ShowCode');
 
       AddIfNotExists(['C'],[],'cm_ImageCenter');
       AddIfNotExists(['F'],[],'cm_StretchImage');
@@ -1237,8 +1295,10 @@ begin
       //AddIfNotExists(['Down'],[],'cm_Rotate90');
 
       AddIfNotExists(VK_P, [ssModifier], 'cm_Print');
+      AddIfNotExists(VK_G, [ssModifier], 'cm_GotoLine');
       AddIfNotExists(VK_A, [ssModifier], 'cm_SelectAll');
       AddIfNotExists(VK_C, [ssModifier], 'cm_CopyToClipboard');
+      AddIfNotExists(VK_Z, [ssModifier], 'cm_Undo');
 
       AddIfNotExists(['A','','ANSI','',
                       'S','','OEM','',
@@ -1263,6 +1323,12 @@ begin
       AddIfNotExists(['Alt+X'],[],'cm_Exit');
       AddIfNotExists(['Alt+Left'],[],'cm_CopyRightToLeft');
       AddIfNotExists(['Alt+Right'],[],'cm_CopyLeftToRight');
+    end;
+
+  HMForm := HotMan.Forms.FindOrCreate('Confirmation');
+  with HMForm.Hotkeys do
+    begin
+      AddIfNotExists(['F2'], [],'cm_AddToQueue');
     end;
 
   HMForm := HotMan.Forms.FindOrCreate('Copy/Move Dialog');
@@ -1496,19 +1562,19 @@ end;
 
 procedure CopySettingsFiles;
 begin
-  { Create default configuration files if need }
-  if gpCfgDir <> gpGlobalCfgDir then
-    begin
-      // extension file
-      if not mbFileExists(gpCfgDir + gcfExtensionAssociation) then
-        CopyFile(gpGlobalCfgDir + gcfExtensionAssociation, gpCfgDir + gcfExtensionAssociation);
-      // pixmaps file
-      if not mbFileExists(gpCfgDir + 'pixmaps.txt') then
-        CopyFile(gpGlobalCfgDir + 'pixmaps.txt', gpCfgDir + 'pixmaps.txt');
-      // multiarc configuration file
-      if not mbFileExists(gpCfgDir + sMULTIARC_FILENAME) then
-        CopyFile(gpGlobalCfgDir + sMULTIARC_FILENAME, gpCfgDir + sMULTIARC_FILENAME);
-    end;
+  {
+    Copy default configuration files if needed
+  }
+  // pixmaps file
+  if not mbFileExists(gpCfgDir + 'pixmaps.txt') then
+  begin
+    CopyFile(gpExePath + 'default' + PathDelim + 'pixmaps.txt', gpCfgDir + 'pixmaps.txt');
+  end;
+  // multiarc configuration file
+  if (mbFileSize(gpCfgDir + sMULTIARC_FILENAME) = 0) then
+  begin
+    CopyFile(gpExePath + 'default' + PathDelim + sMULTIARC_FILENAME, gpCfgDir + sMULTIARC_FILENAME);
+  end;
 end;
 
 procedure CreateGlobs;
@@ -1540,43 +1606,48 @@ begin
   gWFXPlugins := TWFXModuleList.Create;
   gWLXPlugins := TWLXModuleList.Create;
   gMultiArcList := TMultiArcList.Create;
+  gColors := TColorThemes.Create;
+  gStyles := TJsonConfig.Create;
   ColSet := TPanelColumnsList.Create;
   HotMan := THotKeyManager.Create;
 end;
 
 procedure DestroyGlobs;
 begin
-  FreeThenNil(gColorExt);
-  FreeThenNil(gFileInfoToolTip);
-  FreeThenNil(glsDirHistory);
-  FreeThenNil(glsCmdLineHistory);
+  FreeAndNil(gColorExt);
+  FreeAndNil(gFileInfoToolTip);
+  FreeAndNil(glsDirHistory);
+  FreeAndNil(glsCmdLineHistory);
   FreeAndNil(glsVolumeSizeHistory);
-  FreeThenNil(gSpecialDirList);
-  FreeThenNil(gDirectoryHotlist);
-  FreeThenNil(gFavoriteTabsList);
-  FreeThenNil(glsMaskHistory);
-  FreeThenNil(glsSearchHistory);
-  FreeThenNil(glsSearchPathHistory);
-  FreeThenNil(glsReplaceHistory);
-  FreeThenNil(glsReplacePathHistory);
+  FreeAndNil(gSpecialDirList);
+  FreeAndNil(gDirectoryHotlist);
+  FreeAndNil(gFavoriteTabsList);
+  FreeAndNil(glsMaskHistory);
+  FreeAndNil(glsSearchHistory);
+  FreeAndNil(glsSearchPathHistory);
+  FreeAndNil(glsReplaceHistory);
+  FreeAndNil(glsReplacePathHistory);
   FreeAndNil(glsCreateDirectoriesHistory);
   FreeAndNil(glsRenameNameMaskHistory);
   FreeAndNil(glsRenameExtMaskHistory);
-  FreeThenNil(glsIgnoreList);
-  FreeThenNil(glsSearchDirectories);
-  FreeThenNil(glsSearchExcludeFiles);
-  FreeThenNil(glsSearchExcludeDirectories);
-  FreeThenNil(gExts);
-  FreeThenNil(gConfig);
-  FreeThenNil(gSearchTemplateList);
-  FreeThenNil(gDSXPlugins);
-  FreeThenNil(gWCXPlugins);
-  FreeThenNil(gWDXPlugins);
-  FreeThenNil(gWFXPlugins);
-  FreeThenNil(gWLXPlugins);
-  FreeThenNil(gMultiArcList);
-  FreeThenNil(ColSet);
-  FreeThenNil(HotMan);
+  FreeAndNil(glsIgnoreList);
+  FreeAndNil(glsSearchDirectories);
+  FreeAndNil(glsSearchExcludeFiles);
+  FreeAndNil(glsSearchExcludeDirectories);
+  FreeAndNil(gExts);
+  FreeAndNil(gConfig);
+  FreeAndNil(gSearchTemplateList);
+  FreeAndNil(gDSXPlugins);
+  FreeAndNil(gWCXPlugins);
+  FreeAndNil(gWDXPlugins);
+  FreeAndNil(gWFXPlugins);
+  FreeAndNil(gWLXPlugins);
+  FreeAndNil(gMultiArcList);
+  FreeAndNil(gColors);
+  FreeAndNil(gStyles);
+  FreeAndNil(ColSet);
+  FreeAndNil(HotMan);
+  FreeAndNil(gHighlighters);
 end;
 
 {$IFDEF MSWINDOWS}
@@ -1643,6 +1714,7 @@ begin
   gOperationSizeDigits := 1;
   //NOTES: We're intentionnaly not setting our default memory immediately because language file has not been loaded yet.
   //       We'll set them *after* after language has been loaded since we'll know the correct default to use.
+  gConfirmQuit := False;
   gMinimizeToTray := False;
   gAlwaysShowTrayIcon := False;
   gMouseSelectionEnabled := True;
@@ -1653,10 +1725,12 @@ begin
   gWheelScrollLines:= Mouse.WheelScrollLines;
   gAutoFillColumns := False;
   gAutoSizeColumn := 1;
+  gColumnsLongInStatus := False;
   gColumnsAutoSaveWidth := True;
   gColumnsTitleStyle := tsNative;
   gCustomColumnsChangeAllColumns := False;
   gDateTimeFormat := DefaultDateTimeFormat;
+  gColumnsTitleLikeValues := False;
   gCutTextToColWidth := True;
   gExtendCellWidth := False;
   gShowSystemFiles := False;
@@ -1673,6 +1747,7 @@ begin
   gExtraLineSpan := 2;
   gFolderPrefix := '[';
   gFolderPostfix := ']';
+  gRenameConfirmMouse := False;
   { Brief view page }
   gBriefViewFixedCount := 2;
   gBriefViewFixedWidth := 100;
@@ -1767,38 +1842,14 @@ begin
 
   { Colors page }
   gUseCursorBorder := False;
-  gCursorBorderColor := clHighlight;
   gUseFrameCursor := False;
-  gForeColor := clWindowText;
-  gBackColor := clWindow;
-  gBackColor2 := clWindow;
-  gMarkColor := clRed;
-  gCursorColor := clHighlight;
-  gCursorText := clHighlightText;
-  gInactiveCursorColor := clInactiveCaption;
-  gInactiveMarkColor := clMaroon;
   gUseInvertedSelection := False;
   gUseInactiveSelColor := False;
   gAllowOverColor := True;
   gBorderFrameWidth:=1;
 
-  gPathActiveColor := clHighlight;
-  gPathActiveFontColor := clHighlightText;
-  gPathInactiveColor := clBtnFace;
-  gPathInactiveFontColor := clBtnText;
-
   gInactivePanelBrightness := 100; // Full brightness
   gIndUseGradient := True;
-  gIndForeColor := clBlack;
-  gIndBackColor := clWhite;
-
-  gLogInfoColor:= clNavy;
-  gLogErrorColor:= clRed;
-  gLogSuccessColor:= clGreen;
-
-  gSyncLeftColor:= clGreen;
-  gSyncRightColor:= clBlue;
-  gSyncUnknownColor:= clRed;
 
   { Layout page }
   gMainMenu := True;
@@ -1824,6 +1875,7 @@ begin
   gDriveBar2 := True;
   gDriveBarFlat := True;
   gDrivesListButton := True;
+  gDriveBarSyncWidth := False;
   gDirectoryTabs := True;
   gCurDir := True;
   gTabHeader := True;
@@ -1866,6 +1918,7 @@ begin
   gUseTrash := True;
   gSkipFileOpError := False;
   gTypeOfDuplicatedRename := drLegacyWithCopy;
+  gDefaultDropEffect:= True;
   gShowDialogOnDragDrop := True;
   gDragAndDropDesiredTextFormat[DropTextRichText_Index].Name:='Richtext format';
   gDragAndDropDesiredTextFormat[DropTextRichText_Index].DesireLevel:=0;
@@ -1882,6 +1935,7 @@ begin
   gAutoExtractOpenMask := EmptyStr;
   gFileOperationsProgressKind := fopkSeparateWindow;
   gFileOperationsConfirmations := [focCopy, focMove, focDelete, focDeleteToTrash];
+  gFileOperationDuration := -1;
 
   { Multi-Rename }
   gMulRenShowMenuBarOnTop := True;
@@ -1952,6 +2006,8 @@ begin
   gSaveFolderTabs := True;
   gSaveSearchReplaceHistory := True;
   gSaveDirHistory := True;
+  gDirHistoryCount := 30;
+  gMaxStringItems := 50;
   gSaveCmdLineHistory := True;
   gSaveFileMaskHistory := True;
   gSaveVolumeSizeHistory := True;
@@ -1976,6 +2032,7 @@ begin
   gInplaceRename := False;
   gInplaceRenameButton := True;
   gDblClickToParent := False;
+  gDblClickEditPath := False;
   gHotDirAddTargetOrNot := False;
   gHotDirFullExpandOrNot:=False;
   gShowPathInPopup:=FALSE;
@@ -2005,7 +2062,7 @@ begin
   { Icons page }
   gShowIcons := sim_all_and_exe;
   gShowIconsNew := gShowIcons;
-  gIconOverlays := False;
+  gIconOverlays := {$IFDEF UNIX}True{$ELSE}False{$ENDIF};
   gIconsSize := 32;
   gIconsSizeNew := gIconsSize;
   gDiskIconsSize := 16;
@@ -2038,15 +2095,12 @@ begin
   gCopyMovePath4 := '';
   gCopyMovePath5 := '';
   gImagePaintMode := vptPen;
-  gImageBackColor1 := clWindow;
-  gImageBackColor2 := clDefault;
   gImagePaintWidth := 5;
   gColCount := 1;
   gTabSpaces := 8;
+  gMaxCodeSize := 128;
   gMaxTextWidth := 1024;
   gImagePaintColor := clRed;
-  gBookBackgroundColor := clBlack;
-  gBookFontColor := clWhite;
   gTextPosition:= 0;
   gViewerMode:= 0;
   gShowCaret := False;
@@ -2054,23 +2108,25 @@ begin
   gViewerLeftMargin := 4;
   gViewerLineSpacing := 0;
   gPrintMargins:= Classes.Rect(200, 200, 200, 200);
+  gViewerAutoCopy := True;
+  gViewerSynEditMask := AllFilesMask;
+  gViewerJpegQuality := 80;
 
   { Editor }
   gEditWaitTime := 2000;
   gEditorSynEditOptions := SYNEDIT_DEFAULT_OPTIONS;
   gEditorSynEditTabWidth := 8;
   gEditorSynEditRightEdge := 80;
+  gEditorSynEditBlockIndent := 2;
+  gEditorFindWordAtCursor := True;
 
   { Differ }
   gDifferIgnoreCase := False;
+  gDifferAutoCompare := True;
   gDifferKeepScrolling := True;
   gDifferPaintBackground := True;
   gDifferLineDifferences := False;
   gDifferIgnoreWhiteSpace := False;
-  gDifferAddedColor := clPaleGreen;
-  gDifferDeletedColor := clPaleRed;
-  gDifferModifiedColor := clPaleBlue;
-  gDifferModifiedBinaryColor := clRed;
 
   {SyncDirs}
   gSyncDirsSubdirs := False;
@@ -2081,16 +2137,20 @@ begin
   gSyncDirsShowFilterCopyRight := True;
   gSyncDirsShowFilterEqual := True;
   gSyncDirsShowFilterNotEqual := True;
+  gSyncDirsShowFilterUnknown := True;
   gSyncDirsShowFilterCopyLeft := True;
   gSyncDirsShowFilterDuplicates := True;
   gSyncDirsShowFilterSingles := True;
   gSyncDirsFileMask := '*';
+  gSyncDirsFileMaskSave := True;
+  gDateTimeFormatSync := DefaultDateTimeFormatSync;
 
   { Internal Associations}
   gFileAssociationLastCustomAction := rsMsgDefaultCustomActionName;
   gOfferToAddToFileAssociations := False;
   gExtendedContextMenu := False;
   gOpenExecuteViaShell := False;
+  gDefaultContextActions := True;
   gExecuteViaTerminalClose := False;
   gExecuteViaTerminalStayOpen := False;
   gIncludeFileAssociation := False;
@@ -2116,18 +2176,6 @@ begin
     gTreeViewMenuOptions[iIndexContextMode].ShowWholeBranchIfMatch := False;
   end;
   gTreeViewMenuUseKeyboardShortcut := True;
-  gTVMBackgroundColor := clForm;
-  gTVMShortcutColor := clRed;
-  gTVMNormalTextColor := clWindowText;
-  gTVMSecondaryTextColor := clWindowFrame;
-  gTVMFoundTextColor := clHighLight;
-  gTVMUnselectableTextColor := clGrayText;
-  gTVMCursorColor := clHighlight;
-  gTVMShortcutUnderCursor := clHighlightText;
-  gTVMNormalTextUnderCursor := clHighlightText;
-  gTVMSecondaryTextUnderCursor := clBtnHighlight;
-  gTVMFoundTextUnderCursor := clYellow;
-  gTVMUnselectableUnderCursor := clGrayText;
 
   { - Other - }
   gGoToRoot := False;
@@ -2199,11 +2247,10 @@ begin
   { - Not in config - }
   gHelpLang := '';
   gRepeatPassword := True;
-  gDirHistoryCount := 30;
   gFirstTextSearch := True;
   gErrorFile := gpCfgDir + ExtractOnlyFileName(Application.ExeName) + '.err';
   DefaultDateTimeFormat := FormatSettings.ShortDateFormat + ' hh:nn:ss';
-  FormatSettings.DecimalSeparator:='.';
+  DefaultDateTimeFormatSync := 'yyyy.mm.dd hh:nn:ss';
 end;
 
 function OpenConfig(var ErrorMessage: String): Boolean;
@@ -2227,6 +2274,11 @@ begin
           if gConfig.TryGetValue(gConfig.RootNode, 'Configuration/UseConfigInProgramDir', gUseConfigInProgramDir) then
           begin
             gConfig.DeleteNode(gConfig.RootNode, 'Configuration/UseConfigInProgramDir');
+            if not gUseConfigInProgramDir then
+            begin
+              gConfig.Save;
+              mbDeleteFile(gpGlobalCfgDir + 'doublecmd.inf');
+            end;
           end;
 
           if not gUseConfigInProgramDir then
@@ -2340,54 +2392,33 @@ begin
   CopySettingsFiles;
 
   { Internal associations }
-  //"LoadExtsConfig" checks itself if file is present or not
+  // "LoadExtsConfig" checks itself if file is present or not
   LoadConfigCheckErrors(@LoadExtsConfig, gpCfgDir + gcfExtensionAssociation, ErrorMessage);
 
-  if mbFileExists(gpCfgDir + 'dirhistory.txt') then
-  begin
-    LoadStringsFromFile(glsDirHistory, gpCfgDir + 'dirhistory.txt', cMaxStringItems);
-    mbRenameFile(gpCfgDir + 'dirhistory.txt', gpCfgDir + 'dirhistory.txt.obsolete');
-  end;
-  if mbFileExists(gpCfgDir + 'cmdhistory.txt') then
-  begin
-    LoadStringsFromFile(glsCmdLineHistory, gpCfgDir + 'cmdhistory.txt', cMaxStringItems);
-    mbRenameFile(gpCfgDir + 'cmdhistory.txt', gpCfgDir + 'cmdhistory.txt.obsolete');
-  end;
-  if mbFileExists(gpCfgDir + 'maskhistory.txt') then
-  begin
-    LoadStringsFromFile(glsMaskHistory, gpCfgDir + 'maskhistory.txt', cMaxStringItems);
-    mbRenameFile(gpCfgDir + 'maskhistory.txt', gpCfgDir + 'maskhistory.txt.obsolete');
-  end;
-  if mbFileExists(gpCfgDir + 'searchpathhistory.txt') then
-  begin
-    LoadStringsFromFile(glsSearchPathHistory, gpCfgDir + 'searchpathhistory.txt', cMaxStringItems);
-    mbRenameFile(gpCfgDir + 'searchpathhistory.txt', gpCfgDir + 'searchpathhistory.txt.obsolete');
-  end;
-  if mbFileExists(gpCfgDir + 'searchhistory.txt') then
-  begin
-    LoadStringsFromFile(glsSearchHistory, gpCfgDir + 'searchhistory.txt', cMaxStringItems);
-    mbRenameFile(gpCfgDir + 'searchhistory.txt', gpCfgDir + 'searchhistory.txt.obsolete');
-  end;
-  if mbFileExists(gpCfgDir + 'replacehistory.txt') then
-  begin
-    LoadStringsFromFile(glsReplaceHistory, gpCfgDir + 'replacehistory.txt', cMaxStringItems);
-    mbRenameFile(gpCfgDir + 'replacehistory.txt', gpCfgDir + 'replacehistory.txt.obsolete');
-  end;
-  if mbFileExists(gpCfgDir + 'replacehpathhistory.txt') then
-  begin
-    LoadStringsFromFile(glsReplacePathHistory, gpCfgDir + 'replacepathhistory.txt', cMaxStringItems);
-    mbRenameFile(gpCfgDir + 'replacepathhistory.txt', gpCfgDir + 'replacepathhistory.txt.obsolete');
-  end;
   LoadStringsFromFile(glsIgnoreList, ReplaceEnvVars(gIgnoreListFile));
+
+  { Localization }
+  msgLoadLng;
+
+  if (gHighlighters = nil) then
+  begin
+    // Must be after msgLoadLng and before LoadColorsConfig
+    gHighlighters := THighlighters.Create;
+  end;
+
+  { Highlighters }
+  if mbFileExists(gpCfgDir + HighlighterConfig) then
+    LoadConfigCheckErrors(@LoadHighlightersConfig, gpCfgDir + HighlighterConfig, ErrorMessage);
 
   { Hotkeys }
   if not mbFileExists(gpCfgDir + gNameSCFile) then
     gNameSCFile := 'shortcuts.scf';
-  // Rename old shortcuts file to new name.
-  if mbFileExists(gpCfgDir + 'shortcuts.ini') and
-     not mbFileExists(gpCfgDir + gNameSCFile) then
-       mbRenameFile(gpCfgDir + 'shortcuts.ini', gpCfgDir + gNameSCFile);
   LoadConfigCheckErrors(@LoadHotManConfig, gpCfgDir + gNameSCFile, ErrorMessage);
+
+  { Colors }
+  gColors.LoadFromXml(gConfig);
+  if mbFileExists(gpCfgDir + COLORS_JSON) then
+    LoadConfigCheckErrors(@LoadColorsConfig, gpCfgDir + COLORS_JSON, ErrorMessage);
 
   { MultiArc addons }
   if mbFileExists(gpCfgDir + sMULTIARC_FILENAME) then
@@ -2396,9 +2427,6 @@ begin
   { Various history }
   if mbFileExists(gpCfgDir + 'history.xml') then
     LoadConfigCheckErrors(@LoadHistoryConfig, gpCfgDir + 'history.xml', ErrorMessage);
-
-  { Localization }
-  msgLoadLng;
 
   FillFileFuncList;
 
@@ -2410,46 +2438,40 @@ end;
 
 procedure SaveGlobs;
 var
-  TmpConfig: TXmlConfig;
+  OldDir: String;
   ErrMsg: String = '';
 begin
   if (gUseConfigInProgramDirNew <> gUseConfigInProgramDir) and
      (gpCmdLineCfgDir = EmptyStr) then
+  begin
+    OldDir := gpCfgDir;
+
+    if gUseConfigInProgramDirNew then
     begin
-      LoadPaths;
-
-      if gUseConfigInProgramDirNew then
-      begin
-        gpCfgDir := gpGlobalCfgDir;
-        UpdateEnvironmentVariable;
-        FileClose(mbFileCreate(gpGlobalCfgDir + 'doublecmd.inf'));
-      end
-      else begin
-        if mbFileExists(gpGlobalCfgDir + 'doublecmd.inf') then
-          mbDeleteFile(gpGlobalCfgDir + 'doublecmd.inf')
-      end;
-
-      { Remove location of configuration files from XML}
-      if mbFileAccess(gpGlobalCfgDir + 'doublecmd.xml', fmOpenWrite or fmShareDenyWrite) then
-      begin
-        TmpConfig := TXmlConfig.Create(gpGlobalCfgDir + 'doublecmd.xml', True);
-        try
-          TmpConfig.DeleteNode(TmpConfig.RootNode, 'Configuration/UseConfigInProgramDir');
-          TmpConfig.Save;
-        finally
-          TmpConfig.Free;
-        end;
-      end;
-
-      gConfig.FileName := gpCfgDir + 'doublecmd.xml';
+      mbForceDirectory(gpGlobalCfgDir);
+      FileClose(mbFileCreate(gpGlobalCfgDir + 'doublecmd.inf'));
+    end
+    else begin
+      if mbFileExists(gpGlobalCfgDir + 'doublecmd.inf') then
+        mbDeleteFile(gpGlobalCfgDir + 'doublecmd.inf')
     end;
+
+    LoadPaths;
+    gConfig.FileName := gpCfgDir + 'doublecmd.xml';
+    // Copy the configuration to a new location
+    CopyDirTree(OldDir, gpCfgDir, [cffOverwriteFile]);
+
+    gUseConfigInProgramDir := gUseConfigInProgramDirNew;
+  end;
 
   if mbFileAccess(gpCfgDir, fmOpenWrite or fmShareDenyNone) then
   begin
     SaveWithCheck(@SaveEarlyConfig, 'early config', ErrMsg);
     SaveWithCheck(@SaveCfgIgnoreList, 'ignore list', ErrMsg);
     SaveWithCheck(@SaveCfgMainConfig, 'main configuration', ErrMsg);
+    SaveWithCheck(@SaveHighlightersConfig, 'highlighters config', ErrMsg);
     SaveWithCheck(@SaveHistoryConfig, 'various history', ErrMsg);
+    SaveWithCheck(@SaveColorsConfig, 'color themes', ErrMsg);
 
     if ErrMsg <> EmptyStr then
       DebugLn(ErrMsg);
@@ -2497,10 +2519,16 @@ procedure LoadXmlConfig;
       end;
   end;
   procedure GetDCFont(Node: TXmlNode; var FontOptions: TDCFontOptions);
+  var
+    FontQuality: Integer;
   begin
     if Assigned(Node) then
-      gConfig.GetFont(Node, '', FontOptions.Name, FontOptions.Size, Integer(FontOptions.Style), Integer(FontOptions.Quality),
-                                FontOptions.Name, FontOptions.Size, Integer(FontOptions.Style), Integer(FontOptions.Quality));
+    begin
+      FontQuality:= Integer(FontOptions.Quality);
+      gConfig.GetFont(Node, '', FontOptions.Name, FontOptions.Size, Integer(FontOptions.Style), FontQuality,
+                                FontOptions.Name, FontOptions.Size, Integer(FontOptions.Style), FontQuality);
+      FontOptions.Quality:= TFontQuality(FontQuality);
+    end;
   end;
   procedure LoadOption(Node: TXmlNode; var Options: TDrivesListButtonOptions; Option: TDrivesListButtonOption; AName: String);
   var
@@ -2515,6 +2543,7 @@ procedure LoadXmlConfig;
     end;
   end;
 var
+  DecimalSeparator: String;
   Root, Node, SubNode: TXmlNode;
   LoadedConfigVersion, iIndexContextMode: Integer;
   oldQuickSearch: Boolean = True;
@@ -2530,6 +2559,19 @@ begin
     { Double Commander Version }
     gPreviousVersion:= GetAttr(Root, 'DCVersion', EmptyStr);
     LoadedConfigVersion := GetAttr(Root, 'ConfigVersion', ConfigVersion);
+
+    { Create config backup }
+    if (LoadedConfigVersion < ConfigVersion) then
+    try
+      WriteToFile(gpCfgDir + 'doublecmd-' + IntToStr(LoadedConfigVersion) + '.xml.bak');
+    except
+      // Ignore
+    end;
+
+    if (LoadedConfigVersion < 13) then
+    begin
+      DeleteNode(Root, 'Configuration/UseConfigInProgramDir');
+    end;
 
     { Language page }
     gPOFileName := GetValue(Root, 'Language/POFileName', gPOFileName);
@@ -2571,55 +2613,12 @@ begin
       gShowCurDirTitleBar := GetValue(Node, 'ShowCurDirTitleBar', gShowCurDirTitleBar);
       gActiveRight := GetValue(Node, 'ActiveRight', gActiveRight);
 
-      //Trick to split initial legacy command for terminal
-      //  Initial name in config was "RunInTerminal".
-      //  If it is still present in config, it means we're running from an older version.
-      //  So if it's different than our setting, let's split it to get actual "cmd" and "params".
-      //  New version uses "RunInTerminalCloseCmd" from now on.
-      //  ALSO, in the case of Windows, installation default was "cmd.exe /K ..." which means Run-and-stayopen
-      //        in the case of Unix, installation default was "xterm -e sh -c ..." which means Run-and-close
-      //  So because of these two different behavior, transition is done slightly differently.
-      {$IF DEFINED(MSWINDOWS)}
-      gRunInTermStayOpenCmd := GetValue(Node, 'RunInTerminal', gRunInTermStayOpenCmd);
-      if gRunInTermStayOpenCmd<>RunInTermCloseCmd then
-      begin
-        SplitCmdLineToCmdParams(gRunInTermStayOpenCmd, gRunInTermStayOpenCmd, gRunInTermStayOpenParams);
-        if gRunInTermStayOpenParams<>'' then gRunInTermStayOpenParams:=gRunInTermStayOpenParams+' {command}' else gRunInTermStayOpenParams:='{command}';
-      end
-      else
-      begin
-        gRunInTermStayOpenCmd := GetValue(Node, 'RunInTerminalStayOpenCmd', RunInTermStayOpenCmd);
-        gRunInTermStayOpenParams := GetValue(Node, 'RunInTerminalStayOpenParams', RunInTermStayOpenParams);
-      end;
+      gRunTermCmd := GetValue(Node, 'JustRunTerminal', RunTermCmd);
+      gRunTermParams := GetValue(Node, 'JustRunTermParams', RunTermParams);
       gRunInTermCloseCmd := GetValue(Node, 'RunInTerminalCloseCmd', RunInTermCloseCmd);
       gRunInTermCloseParams := GetValue(Node, 'RunInTerminalCloseParams', RunInTermCloseParams);
-      {$ELSE}
-      gRunInTermCloseCmd := GetValue(Node, 'RunInTerminal', gRunInTermCloseCmd);
-      if gRunInTermCloseCmd<>RunInTermCloseCmd then
-      begin
-        SplitCmdLineToCmdParams(gRunInTermCloseCmd, gRunInTermCloseCmd, gRunInTermCloseParams);
-        if gRunInTermCloseParams<>'' then gRunInTermCloseParams:=gRunInTermCloseParams+' {command}' else gRunInTermStayOpenParams:='{command}';
-      end
-      else
-      begin
-        gRunInTermCloseCmd := GetValue(Node, 'RunInTerminalCloseCmd', RunInTermCloseCmd);
-        gRunInTermCloseParams := GetValue(Node, 'RunInTerminalCloseParams', RunInTermCloseParams);
-      end;
       gRunInTermStayOpenCmd := GetValue(Node, 'RunInTerminalStayOpenCmd', RunInTermStayOpenCmd);
       gRunInTermStayOpenParams := GetValue(Node, 'RunInTerminalStayOpenParams', RunInTermStayOpenParams);
-      {$ENDIF}
-
-      // Let's try to be backward comptible and re-load possible old values for terminal launch command
-      gRunTermCmd := GetValue(Node, 'JustRunTerminal', '');
-      if gRunTermCmd = '' then
-      begin
-        gRunTermCmd := GetValue(Node, 'RunTerminal', RunTermCmd);
-        SplitCmdLineToCmdParams(gRunTermCmd, gRunTermCmd,gRunTermParams);
-      end
-      else
-      begin
-        gRunTermParams := GetValue(Node, 'JustRunTermParams', RunTermParams);
-      end;
 
       gOnlyOneAppInstance := GetValue(Node, 'OnlyOneAppInstance', gOnlyOneAppInstance);
       gLynxLike := GetValue(Node, 'LynxLike', gLynxLike);
@@ -2664,6 +2663,7 @@ begin
       gSizeDisplayUnits[fsfPersonalizedMega] := ' ' + Trim(GetValue(Node, 'PersonalizedMega', gSizeDisplayUnits[fsfPersonalizedMega]));
       gSizeDisplayUnits[fsfPersonalizedGiga] := ' ' + Trim(GetValue(Node, 'PersonalizedGiga', gSizeDisplayUnits[fsfPersonalizedGiga]));
       gSizeDisplayUnits[fsfPersonalizedTera] := ' ' + Trim(GetValue(Node, 'PersonalizedTera', gSizeDisplayUnits[fsfPersonalizedTera]));
+      gConfirmQuit := GetValue(Node, 'ConfirmQuit', gConfirmQuit);
       gMinimizeToTray := GetValue(Node, 'MinimizeToTray', gMinimizeToTray);
       gAlwaysShowTrayIcon := GetValue(Node, 'AlwaysShowTrayIcon', gAlwaysShowTrayIcon);
       gMouseSelectionEnabled := GetAttr(Node, 'Mouse/Selection/Enabled', gMouseSelectionEnabled);
@@ -2675,6 +2675,7 @@ begin
       gAutoFillColumns := GetValue(Node, 'AutoFillColumns', gAutoFillColumns);
       gAutoSizeColumn := GetValue(Node, 'AutoSizeColumn', gAutoSizeColumn);
       gDateTimeFormat := GetValidDateTimeFormat(GetValue(Node, 'DateTimeFormat', gDateTimeFormat), DefaultDateTimeFormat);
+      gColumnsTitleLikeValues := GetValue(Node, 'ColumnsTitleLikeValues', gColumnsTitleLikeValues);
       gCutTextToColWidth := GetValue(Node, 'CutTextToColumnWidth', gCutTextToColWidth);
       gExtendCellWidth := GetValue(Node, 'ExtendCellWidth', gExtendCellWidth);
       gShowSystemFiles := GetValue(Node, 'ShowSystemFiles', gShowSystemFiles);
@@ -2722,34 +2723,14 @@ begin
     if Assigned(Node) then
     begin
       gUseCursorBorder := GetValue(Node, 'UseCursorBorder', gUseCursorBorder);
-      gCursorBorderColor := GetValue(Node, 'CursorBorderColor', gCursorBorderColor);
       gUseFrameCursor := GetValue(Node, 'UseFrameCursor', gUseFrameCursor);
-      gForeColor := GetValue(Node, 'Foreground', gForeColor);
-      gBackColor := GetValue(Node, 'Background', gBackColor);
-      gBackColor2 := GetValue(Node, 'Background2', gBackColor2);
-      gMarkColor := GetValue(Node, 'Mark', gMarkColor);
-      gCursorColor := GetValue(Node, 'Cursor', gCursorColor);
-      gCursorText := GetValue(Node, 'CursorText', gCursorText);
-      gInactiveCursorColor := GetValue(Node, 'InactiveCursor', gInactiveCursorColor);
-      gInactiveMarkColor := GetValue(Node, 'InactiveMark', gInactiveMarkColor);
       gUseInvertedSelection := GetValue(Node, 'UseInvertedSelection', gUseInvertedSelection);
       gUseInactiveSelColor := GetValue(Node, 'UseInactiveSelColor', gUseInactiveSelColor);
       gAllowOverColor   := GetValue(Node, 'AllowOverColor', gAllowOverColor);
       gBorderFrameWidth := GetValue(Node, 'gBorderFrameWidth', gBorderFrameWidth);
 
-      gPathActiveColor := GetValue(Node, 'PathLabel/ActiveColor', gPathActiveColor);
-      gPathActiveFontColor := GetValue(Node, 'PathLabel/ActiveFontColor', gPathActiveFontColor);
-      gPathInactiveColor := GetValue(Node, 'PathLabel/InactiveColor', gPathInactiveColor);
-      gPathInactiveFontColor := GetValue(Node, 'PathLabel/InactiveFontColor', gPathInactiveFontColor);
-
       gInactivePanelBrightness := GetValue(Node, 'InactivePanelBrightness', gInactivePanelBrightness);
       gIndUseGradient := GetValue(Node, 'FreeSpaceIndicator/UseGradient', gIndUseGradient);
-      gIndForeColor := GetValue(Node, 'FreeSpaceIndicator/ForeColor', gIndForeColor);
-      gIndBackColor := GetValue(Node, 'FreeSpaceIndicator/BackColor', gIndBackColor);
-
-      gLogInfoColor:= GetValue(Node, 'LogWindow/Info', gLogInfoColor);
-      gLogErrorColor:= GetValue(Node, 'LogWindow/Error', gLogErrorColor);
-      gLogSuccessColor:= GetValue(Node, 'LogWindow/Success', gLogSuccessColor);
     end;
 
     { ToolTips page }
@@ -2846,6 +2827,7 @@ begin
       SubNode := FindNode(Node, 'ColumnsView');
       if Assigned(SubNode) then
       begin
+        gColumnsLongInStatus := GetValue(SubNode, 'LongInStatus', gColumnsLongInStatus);
         gColumnsAutoSaveWidth := GetValue(SubNode, 'AutoSaveWidth', gColumnsAutoSaveWidth);
         gColumnsTitleStyle := TTitleStyle(GetValue(SubNode, 'TitleStyle', Integer(gColumnsTitleStyle)));
       end;
@@ -2864,6 +2846,7 @@ begin
       gExtraLineSpan := GetValue(Node, 'ExtraLineSpan', gExtraLineSpan);
       gFolderPrefix := GetValue(Node, 'FolderPrefix', gFolderPrefix);
       gFolderPostfix := GetValue(Node, 'FolderPostfix', gFolderPostfix);
+      gRenameConfirmMouse := GetValue(Node, 'RenameConfirmMouse', gRenameConfirmMouse);
     end;
 
     { Keys page }
@@ -2899,6 +2882,7 @@ begin
       gUseTrash := GetValue(Node, 'UseTrash', gUseTrash);
       gSkipFileOpError := GetValue(Node, 'SkipFileOpError', gSkipFileOpError);
       gTypeOfDuplicatedRename := tDuplicatedRename(GetValue(Node, 'TypeOfDuplicatedRename', Integer(gTypeOfDuplicatedRename)));
+      gDefaultDropEffect := GetValue(Node, 'DefaultDropEffect', gDefaultDropEffect);
       gShowDialogOnDragDrop := GetValue(Node, 'ShowDialogOnDragDrop', gShowDialogOnDragDrop);
       gDragAndDropDesiredTextFormat[DropTextRichText_Index].DesireLevel := GetValue(Node, 'DragAndDropTextRichtextDesireLevel', gDragAndDropDesiredTextFormat[DropTextRichText_Index].DesireLevel);
       gDragAndDropDesiredTextFormat[DropTextHtml_Index].DesireLevel := GetValue(Node, 'DragAndDropTextHtmlDesireLevel',gDragAndDropDesiredTextFormat[DropTextHtml_Index].DesireLevel);
@@ -2912,6 +2896,18 @@ begin
       gSearchDefaultTemplate := GetValue(Node, 'SearchDefaultTemplate', gSearchDefaultTemplate);
       gFileOperationsProgressKind := TFileOperationsProgressKind(GetValue(Node, 'ProgressKind', Integer(gFileOperationsProgressKind)));
       gFileOperationsConfirmations := TFileOperationsConfirmations(GetValue(Node, 'Confirmations', Integer(gFileOperationsConfirmations)));
+      // Operations sounds
+      SubNode := Node.FindNode('Sounds');
+      if Assigned(SubNode) then
+      begin
+        gFileOperationDuration:= GetAttr(SubNode, 'Duration', gFileOperationDuration);
+        gFileOperationsSounds[fsoCopy]:= ReplaceEnvVars(GetValue(SubNode, 'Copy', EmptyStr));
+        gFileOperationsSounds[fsoMove]:= ReplaceEnvVars(GetValue(SubNode, 'Move', EmptyStr));
+        gFileOperationsSounds[fsoWipe]:= ReplaceEnvVars(GetValue(SubNode, 'Wipe', EmptyStr));
+        gFileOperationsSounds[fsoDelete]:= ReplaceEnvVars(GetValue(SubNode, 'Delete', EmptyStr));
+        gFileOperationsSounds[fsoSplit]:= ReplaceEnvVars(GetValue(SubNode, 'Split', EmptyStr));
+        gFileOperationsSounds[fsoCombine]:= ReplaceEnvVars(GetValue(SubNode, 'Combine', EmptyStr));
+      end;
       // Operations options
       SubNode := Node.FindNode('Options');
       if Assigned(SubNode) then
@@ -2989,6 +2985,8 @@ begin
     gSaveFolderTabs := GetAttr(Root, 'Configuration/FolderTabs/Save', gSaveFolderTabs);
     gSaveSearchReplaceHistory:= GetAttr(Root, 'History/SearchReplaceHistory/Save', gSaveSearchReplaceHistory);
     gSaveDirHistory := GetAttr(Root, 'History/DirHistory/Save', gSaveDirHistory);
+    gDirHistoryCount := GetAttr(Root, 'History/DirHistory/Count', gDirHistoryCount);
+    gMaxStringItems := GetAttr(Root, 'History/MaxStringItems', gMaxStringItems);
     gSaveCmdLineHistory := GetAttr(Root, 'History/CmdLineHistory/Save', gSaveCmdLineHistory);
     gSaveFileMaskHistory := GetAttr(Root, 'History/FileMaskHistory/Save', gSaveFileMaskHistory);
     gSaveVolumeSizeHistory := GetAttr(Root, 'History/VolumeSizeHistory/Save', gSaveVolumeSizeHistory);
@@ -3042,6 +3040,7 @@ begin
       gInplaceRename := GetValue(Node, 'InplaceRename', gInplaceRename);
       gInplaceRenameButton := GetValue(Node, 'InplaceRenameButton', gInplaceRenameButton);
       gDblClickToParent := GetValue(Node, 'DblClickToParent', gDblClickToParent);
+      gDblClickEditPath := GetValue(Node, 'DoubleClickEditPath', gDblClickEditPath);
       gHotDirAddTargetOrNot:=GetValue(Node, 'HotDirAddTargetOrNot', gHotDirAddTargetOrNot);
       gHotDirFullExpandOrNot:=GetValue(Node, 'HotDirFullExpandOrNot', gHotDirFullExpandOrNot);
       gShowPathInPopup:=GetValue(Node, 'ShowPathInPopup', gShowPathInPopup);
@@ -3050,7 +3049,17 @@ begin
       gHotDirFilenameStyle := TConfigFilenameStyle(GetValue(Node, 'FilenameStyle', ord(gHotDirFilenameStyle)));
       gHotDirPathToBeRelativeTo := gConfig.GetValue(Node, 'PathToBeRelativeTo', gHotDirPathToBeRelativeTo);
       gHotDirPathModifierElements := tHotDirPathModifierElements(GetValue(Node, 'PathModifierElements', Integer(gHotDirPathModifierElements)));
-      gDefaultTextEncoding := GetValue(Node, 'DefaultTextEncoding', gDefaultTextEncoding);
+      gDefaultTextEncoding := NormalizeEncoding(GetValue(Node, 'DefaultTextEncoding', gDefaultTextEncoding));
+{$IF DEFINED(UNIX) AND NOT (DEFINED(DARWIN) OR DEFINED(HAIKU))}
+      gSystemItemProperties := GetValue(Node, 'SystemItemProperties', gSystemItemProperties);
+{$ENDIF}
+      DecimalSeparator:= GetValue(Node, 'DecimalSeparator', FormatSettings.DecimalSeparator);
+      if (Length(DecimalSeparator) > 0) and (Ord(DecimalSeparator[1]) < $80) and
+         (DecimalSeparator[1] <> FormatSettings.DecimalSeparator) then
+      begin
+        CustomDecimalSeparator:= DecimalSeparator;
+        FormatSettings.DecimalSeparator:= CustomDecimalSeparator[1];
+      end;
     end;
 
     { Thumbnails }
@@ -3127,8 +3136,6 @@ begin
       gImageStretchOnlyLarge := GetValue(Node, 'ImageStretchLargeOnly', gImageStretchOnlyLarge);
       gImageShowTransparency := GetValue(Node, 'ImageShowTransparency', gImageShowTransparency);
       gImageCenter := GetValue(Node, 'ImageCenter', gImageCenter);
-      gImageBackColor1:= GetValue(Node, 'ImageBackColor1', gImageBackColor1);
-      gImageBackColor2:= GetValue(Node, 'ImageBackColor2', gImageBackColor2);
       gPreviewVisible := GetValue(Node, 'PreviewVisible', gPreviewVisible);
       gCopyMovePath1 := GetValue(Node, 'CopyMovePath1', gCopyMovePath1);
       gCopyMovePath2 := GetValue(Node, 'CopyMovePath2', gCopyMovePath2);
@@ -3140,6 +3147,7 @@ begin
       gColCount    := GetValue(Node, 'NumberOfColumns', gColCount);
       gTabSpaces := GetValue(Node, 'TabSpaces', gTabSpaces);
       gMaxTextWidth := GetValue(Node, 'MaxTextWidth', gMaxTextWidth);
+      gMaxCodeSize := GetValue(Node, 'MaxCodeSize', gMaxCodeSize);
       gViewerMode  := GetValue(Node, 'ViewerMode'  , gViewerMode);
       gPrintMargins := GetValue(Node, 'PrintMargins'  , gPrintMargins);
       gShowCaret := GetValue(Node, 'ShowCaret'  , gShowCaret);
@@ -3147,9 +3155,10 @@ begin
       gViewerLeftMargin := GetValue(Node, 'LeftMargin' , gViewerLeftMargin);
       gViewerLineSpacing := GetValue(Node, 'ExtraLineSpan' , gViewerLineSpacing);
       gImagePaintColor := GetValue(Node, 'PaintColor', gImagePaintColor);
-      gBookBackgroundColor := GetValue(Node, 'BackgroundColor', gBookBackgroundColor);
-      gBookFontColor := GetValue(Node, 'FontColor', gBookFontColor);
       gTextPosition := GetValue(Node, 'TextPosition',  gTextPosition);
+      gViewerAutoCopy := GetValue(Node, 'AutoCopy',  gViewerAutoCopy);
+      gViewerSynEditMask := GetValue(Node, 'SynEditMask', gViewerSynEditMask);
+      gViewerJpegQuality := GetValue(Node, 'JpegQuality', gViewerJpegQuality);
       if LoadedConfigVersion < 7 then
       begin
         gThumbSave := GetValue(Node, 'SaveThumbnails', gThumbSave);
@@ -3164,6 +3173,8 @@ begin
       gEditorSynEditOptions := TSynEditorOptions(GetValue(Node, 'SynEditOptions', Integer(gEditorSynEditOptions)));
       gEditorSynEditTabWidth := GetValue(Node, 'SynEditTabWidth', gEditorSynEditTabWidth);
       gEditorSynEditRightEdge := GetValue(Node, 'SynEditRightEdge', gEditorSynEditRightEdge);
+      gEditorSynEditBlockIndent := GetValue(Node, 'SynEditBlockIndent', gEditorSynEditBlockIndent);
+      gEditorFindWordAtCursor := GetValue(Node, 'FindWordAtCursor', gEditorFindWordAtCursor);
     end;
 
     { Differ }
@@ -3171,22 +3182,12 @@ begin
     if Assigned(Node) then
     begin
       gDifferIgnoreCase := GetValue(Node, 'IgnoreCase', gDifferIgnoreCase);
+      gDifferAutoCompare := GetValue(Node, 'AutoCompare', gDifferAutoCompare);
       gDifferKeepScrolling := GetValue(Node, 'KeepScrolling', gDifferKeepScrolling);
       gDifferPaintBackground := GetValue(Node, 'PaintBackground', gDifferPaintBackground);
       gDifferLineDifferences := GetValue(Node, 'LineDifferences', gDifferLineDifferences);
       gDifferIgnoreWhiteSpace := GetValue(Node, 'IgnoreWhiteSpace', gDifferIgnoreWhiteSpace);
-      SubNode := FindNode(Node, 'Colors');
-      if Assigned(SubNode) then
-      begin
-        gDifferAddedColor := GetValue(SubNode, 'Added', gDifferAddedColor);
-        gDifferDeletedColor := GetValue(SubNode, 'Deleted', gDifferDeletedColor);
-        gDifferModifiedColor := GetValue(SubNode, 'Modified', gDifferModifiedColor);
-        SubNode := FindNode(Node, 'Colors/Binary');
-        if Assigned(SubNode) then begin
-          gDifferModifiedBinaryColor := GetValue(SubNode, 'Modified', gDifferModifiedBinaryColor);
-        end;
       end;
-    end;
 
     { SyncDirs }
     Node := Root.FindNode('SyncDirs');
@@ -3200,17 +3201,13 @@ begin
       gSyncDirsShowFilterCopyRight := GetValue(Node, 'FilterCopyRight', gSyncDirsShowFilterCopyRight);
       gSyncDirsShowFilterEqual := GetValue(Node, 'FilterEqual', gSyncDirsShowFilterEqual);
       gSyncDirsShowFilterNotEqual := GetValue(Node, 'FilterNotEqual', gSyncDirsShowFilterNotEqual);
+      gSyncDirsShowFilterUnknown := GetValue(Node, 'FilterUnknown', gSyncDirsShowFilterUnknown);
       gSyncDirsShowFilterCopyLeft := GetValue(Node, 'FilterCopyLeft', gSyncDirsShowFilterCopyLeft);
       gSyncDirsShowFilterDuplicates := GetValue(Node, 'FilterDuplicates', gSyncDirsShowFilterDuplicates);
       gSyncDirsShowFilterSingles := GetValue(Node, 'FilterSingles', gSyncDirsShowFilterSingles);
       gSyncDirsFileMask := GetValue(Node, 'FileMask', gSyncDirsFileMask);
-      SubNode := FindNode(Node, 'Colors');
-      if Assigned(SubNode) then
-      begin
-        gSyncLeftColor := GetValue(SubNode, 'Left', gSyncLeftColor);
-        gSyncRightColor := GetValue(SubNode, 'Right', gSyncRightColor);
-        gSyncUnknownColor := GetValue(SubNode, 'Unknown', gSyncUnknownColor);
-      end;
+      gSyncDirsFileMaskSave := GetAttr(Node, 'FileMask/Save', gSyncDirsFileMaskSave);
+      gDateTimeFormatSync := GetValidDateTimeFormat(GetValue(Node, 'DateTimeFormat', gDateTimeFormatSync), DefaultDateTimeFormatSync);
     end;
 
     { Internal Associations}
@@ -3220,6 +3217,7 @@ begin
       gOfferToAddToFileAssociations := GetValue(Node, 'OfferToAddNewFileType', gOfferToAddToFileAssociations);
       gFileAssociationLastCustomAction := GetValue(Node, 'LastCustomAction', gFileAssociationLastCustomAction);
       gExtendedContextMenu := GetValue(Node, 'ExpandedContextMenu', gExtendedContextMenu);
+      gDefaultContextActions := GetValue(Node,'DefaultContextActions', gDefaultContextActions);
       gOpenExecuteViaShell := GetValue(Node,'ExecuteViaShell', gOpenExecuteViaShell);
       gExecuteViaTerminalClose := GetValue(Node,'OpenSystemWithTerminalClose', gExecuteViaTerminalClose);
       gExecuteViaTerminalStayOpen := GetValue(Node,'OpenSystemWithTerminalStayOpen', gExecuteViaTerminalStayOpen);
@@ -3251,18 +3249,6 @@ begin
         gTreeViewMenuOptions[iIndexContextMode].ShowWholeBranchIfMatch := GetValue(SubNode, 'ShowWholeBranchIfMatch', gTreeViewMenuOptions[iIndexContextMode].ShowWholeBranchIfMatch);
       end;
       gTreeViewMenuUseKeyboardShortcut := GetValue(Node, 'TreeViewMenuUseKeyboardShortcut', gTreeViewMenuUseKeyboardShortcut);
-      gTVMBackgroundColor := GetValue(Node, 'BackgroundColor', gTVMBackgroundColor);
-      gTVMShortcutColor := GetValue(Node, 'ShortcutColor', gTVMShortcutColor);
-      gTVMNormalTextColor := GetValue(Node, 'NormalTextColor', gTVMNormalTextColor);
-      gTVMSecondaryTextColor := GetValue(Node, 'SecondaryTextColor', gTVMSecondaryTextColor);
-      gTVMFoundTextColor := GetValue(Node, 'FoundTextColor', gTVMFoundTextColor);
-      gTVMUnselectableTextColor := GetValue(Node, 'UnselectableTextColor', gTVMUnselectableTextColor);
-      gTVMCursorColor := GetValue(Node, 'CursorColor', gTVMCursorColor);
-      gTVMShortcutUnderCursor := GetValue(Node, 'ShortcutUnderCursor', gTVMShortcutUnderCursor);
-      gTVMNormalTextUnderCursor := GetValue(Node, 'NormalTextUnderCursor', gTVMNormalTextUnderCursor);
-      gTVMSecondaryTextUnderCursor := GetValue(Node, 'SecondaryTextUnderCursor', gTVMSecondaryTextUnderCursor);
-      gTVMFoundTextUnderCursor := GetValue(Node, 'FoundTextUnderCursor', gTVMFoundTextUnderCursor);
-      gTVMUnselectableUnderCursor := GetValue(Node, 'UnselectableUnderCursor', gTVMUnselectableUnderCursor);
     end;
 
     { Favorite Tabs }
@@ -3407,6 +3393,7 @@ begin
     SetValue(Node, 'PersonalizedMega', Trim(gSizeDisplayUnits[fsfPersonalizedMega]));
     SetValue(Node, 'PersonalizedGiga', Trim(gSizeDisplayUnits[fsfPersonalizedGiga]));
     SetValue(Node, 'PersonalizedTera', Trim(gSizeDisplayUnits[fsfPersonalizedTera]));
+    SetValue(Node, 'ConfirmQuit', gConfirmQuit);
     SetValue(Node, 'MinimizeToTray', gMinimizeToTray);
     SetValue(Node, 'AlwaysShowTrayIcon', gAlwaysShowTrayIcon);
     SubNode := FindNode(Node, 'Mouse', True);
@@ -3421,6 +3408,7 @@ begin
     SetValue(Node, 'CustomColumnsChangeAllColumns', gCustomColumnsChangeAllColumns);
     SetValue(Node, 'BriefViewFileExtAligned', gBriefViewFileExtAligned);
     SetValue(Node, 'DateTimeFormat', gDateTimeFormat);
+    SetValue(Node, 'ColumnsTitleLikeValues', gColumnsTitleLikeValues);
     SetValue(Node, 'CutTextToColumnWidth', gCutTextToColWidth);
     SetValue(Node, 'ExtendCellWidth', gExtendCellWidth);
     SetValue(Node, 'ShowSystemFiles', gShowSystemFiles);
@@ -3461,34 +3449,13 @@ begin
     { Colors page }
     Node := FindNode(Root, 'Colors', True);
     SetValue(Node, 'UseCursorBorder', gUseCursorBorder);
-    SetValue(Node, 'CursorBorderColor', gCursorBorderColor);
     SetValue(Node, 'UseFrameCursor', gUseFrameCursor);
-    SetValue(Node, 'Foreground', gForeColor);
-    SetValue(Node, 'Background', gBackColor);
-    SetValue(Node, 'Background2', gBackColor2);
-    SetValue(Node, 'Cursor', gCursorColor);
-    SetValue(Node, 'CursorText', gCursorText);
-    SetValue(Node, 'Mark', gMarkColor);
-    SetValue(Node, 'InactiveCursor', gInactiveCursorColor);
-    SetValue(Node, 'InactiveMark', gInactiveMarkColor);
     SetValue(Node, 'UseInvertedSelection', gUseInvertedSelection);
     SetValue(Node, 'UseInactiveSelColor', gUseInactiveSelColor);
     SetValue(Node, 'AllowOverColor', gAllowOverColor);
     SetValue(Node, 'gBorderFrameWidth', gBorderFrameWidth);
-
-    SetValue(Node, 'PathLabel/ActiveColor', gPathActiveColor);
-    SetValue(Node, 'PathLabel/ActiveFontColor', gPathActiveFontColor);
-    SetValue(Node, 'PathLabel/InactiveColor', gPathInactiveColor);
-    SetValue(Node, 'PathLabel/InactiveFontColor', gPathInactiveFontColor);
-
     SetValue(Node, 'InactivePanelBrightness', gInactivePanelBrightness);
     SetValue(Node, 'FreeSpaceIndicator/UseGradient', gIndUseGradient);
-    SetValue(Node, 'FreeSpaceIndicator/ForeColor', gIndForeColor);
-    SetValue(Node, 'FreeSpaceIndicator/BackColor', gIndBackColor);
-
-    SetValue(Node, 'LogWindow/Info', gLogInfoColor);
-    SetValue(Node, 'LogWindow/Error', gLogErrorColor);
-    SetValue(Node, 'LogWindow/Success', gLogSuccessColor);
 
     gColorExt.Save(gConfig, Node);
 
@@ -3559,6 +3526,7 @@ begin
     SetValue(SubNode, 'NewFilesPosition', Integer(gNewFilesPosition));
     SetValue(SubNode, 'UpdatedFilesPosition', Integer(gUpdatedFilesPosition));
     SubNode := FindNode(Node, 'ColumnsView', True);
+    SetValue(SubNode, 'LongInStatus', gColumnsLongInStatus);
     SetValue(SubNode, 'AutoSaveWidth', gColumnsAutoSaveWidth);
     SetValue(SubNode, 'TitleStyle', Integer(gColumnsTitleStyle));
     SubNode := FindNode(Node, 'BriefView', True);
@@ -3570,6 +3538,7 @@ begin
     SetValue(Node, 'ExtraLineSpan', gExtraLineSpan);
     SetValue(Node, 'FolderPrefix', gFolderPrefix);
     SetValue(Node, 'FolderPostfix', gFolderPostfix);
+    SetValue(Node, 'RenameConfirmMouse', gRenameConfirmMouse);
 
     { Keys page }
     Node := FindNode(Root, 'Keyboard', True);
@@ -3596,6 +3565,7 @@ begin
     SetValue(Node, 'UseTrash', gUseTrash);
     SetValue(Node, 'SkipFileOpError', gSkipFileOpError);
     SetValue(Node, 'TypeOfDuplicatedRename', Integer(gTypeOfDuplicatedRename));
+    SetValue(Node, 'DefaultDropEffect', gDefaultDropEffect);
     SetValue(Node, 'ShowDialogOnDragDrop', gShowDialogOnDragDrop);
     SetValue(Node, 'DragAndDropTextRichtextDesireLevel', gDragAndDropDesiredTextFormat[DropTextRichText_Index].DesireLevel);
     SetValue(Node, 'DragAndDropTextHtmlDesireLevel',gDragAndDropDesiredTextFormat[DropTextHtml_Index].DesireLevel);
@@ -3666,6 +3636,8 @@ begin
     SetAttr(Root, 'Configuration/FolderTabs/Save', gSaveFolderTabs);
     SetAttr(Root, 'History/SearchReplaceHistory/Save', gSaveSearchReplaceHistory);
     SetAttr(Root, 'History/DirHistory/Save', gSaveDirHistory);
+    SetAttr(Root, 'History/DirHistory/Count', gDirHistoryCount);
+    SetAttr(Root, 'History/MaxStringItems', gMaxStringItems);
     SetAttr(Root, 'History/CmdLineHistory/Save', gSaveCmdLineHistory);
     SetAttr(Root, 'History/FileMaskHistory/Save', gSaveFileMaskHistory);
     SetAttr(Root, 'History/VolumeSizeHistory/Save', gSaveVolumeSizeHistory);
@@ -3693,6 +3665,7 @@ begin
     SetValue(Node, 'InplaceRename', gInplaceRename);
     SetValue(Node, 'InplaceRenameButton', gInplaceRenameButton);
     SetValue(Node, 'DblClickToParent', gDblClickToParent);
+    SetValue(Node, 'DoubleClickEditPath', gDblClickEditPath);
     SetValue(Node, 'HotDirAddTargetOrNot',gHotDirAddTargetOrNot);
     SetValue(Node, 'HotDirFullExpandOrNot', gHotDirFullExpandOrNot);
     SetValue(Node, 'ShowPathInPopup', gShowPathInPopup);
@@ -3702,6 +3675,10 @@ begin
     SetValue(Node, 'PathToBeRelativeTo', gHotDirPathToBeRelativeTo);
     SetValue(Node, 'PathModifierElements', Integer(gHotDirPathModifierElements));
     SetValue(Node, 'DefaultTextEncoding', gDefaultTextEncoding);
+{$IF DEFINED(UNIX) AND NOT (DEFINED(DARWIN) OR DEFINED(HAIKU))}
+    SetValue(Node, 'SystemItemProperties', gSystemItemProperties);
+{$ENDIF}
+    SetValue(Node, 'DecimalSeparator', CustomDecimalSeparator);
 
     { Thumbnails }
     Node := FindNode(Root, 'Thumbnails', True);
@@ -3755,8 +3732,6 @@ begin
     SetValue(Node, 'ImageStretchLargeOnly', gImageStretchOnlyLarge);
     SetValue(Node, 'ImageShowTransparency', gImageShowTransparency);
     SetValue(Node, 'ImageCenter', gImageCenter);
-    SetValue(Node, 'ImageBackColor1', gImageBackColor1);
-    SetValue(Node, 'ImageBackColor2', gImageBackColor2);
     SetValue(Node, 'CopyMovePath1', gCopyMovePath1);
     SetValue(Node, 'CopyMovePath2', gCopyMovePath2);
     SetValue(Node, 'CopyMovePath3', gCopyMovePath3);
@@ -3766,6 +3741,7 @@ begin
     SetValue(Node, 'PaintWidth', gImagePaintWidth);
     SetValue(Node, 'NumberOfColumns', gColCount);
     SetValue(Node, 'TabSpaces', gTabSpaces);
+    SetValue(Node, 'MaxCodeSize', gMaxCodeSize);
     SetValue(Node, 'MaxTextWidth', gMaxTextWidth);
     SetValue(Node, 'ViewerMode' , gViewerMode);
     SetValue(Node, 'PrintMargins', gPrintMargins);
@@ -3775,9 +3751,10 @@ begin
     SetValue(Node, 'ExtraLineSpan' , gViewerLineSpacing);
 
     SetValue(Node, 'PaintColor', gImagePaintColor);
-    SetValue(Node, 'BackgroundColor', gBookBackgroundColor);
-    SetValue(Node, 'FontColor', gBookFontColor);
     SetValue(Node, 'TextPosition', gTextPosition);
+    SetValue(Node, 'AutoCopy', gViewerAutoCopy);
+    SetValue(Node, 'SynEditMask', gViewerSynEditMask);
+    SetValue(Node, 'JpegQuality', gViewerJpegQuality);
 
     { Editor }
     Node := FindNode(Root, 'Editor',True);
@@ -3785,20 +3762,17 @@ begin
     SetValue(Node, 'SynEditOptions', Integer(gEditorSynEditOptions));
     SetValue(Node, 'SynEditTabWidth', gEditorSynEditTabWidth);
     SetValue(Node, 'SynEditRightEdge', gEditorSynEditRightEdge);
+    SetValue(Node, 'SynEditBlockIndent', gEditorSynEditBlockIndent);
+    SetValue(Node, 'FindWordAtCursor', gEditorFindWordAtCursor);
 
     { Differ }
     Node := FindNode(Root, 'Differ',True);
     SetValue(Node, 'IgnoreCase', gDifferIgnoreCase);
+    SetValue(Node, 'AutoCompare', gDifferAutoCompare);
     SetValue(Node, 'KeepScrolling', gDifferKeepScrolling);
     SetValue(Node, 'PaintBackground', gDifferPaintBackground);
     SetValue(Node, 'LineDifferences', gDifferLineDifferences);
     SetValue(Node, 'IgnoreWhiteSpace', gDifferIgnoreWhiteSpace);
-    SubNode := FindNode(Node, 'Colors', True);
-    SetValue(SubNode, 'Added', gDifferAddedColor);
-    SetValue(SubNode, 'Deleted', gDifferDeletedColor);
-    SetValue(SubNode, 'Modified', gDifferModifiedColor);
-    SubNode := FindNode(Node, 'Colors/Binary', True);
-    SetValue(SubNode, 'Modified', gDifferModifiedBinaryColor);
 
     { SyncDirs }
     Node := FindNode(Root, 'SyncDirs', True);
@@ -3810,20 +3784,20 @@ begin
     SetValue(Node, 'FilterCopyRight', gSyncDirsShowFilterCopyRight);
     SetValue(Node, 'FilterEqual', gSyncDirsShowFilterEqual);
     SetValue(Node, 'FilterNotEqual', gSyncDirsShowFilterNotEqual);
+    SetValue(Node, 'FilterUnknown', gSyncDirsShowFilterUnknown);
     SetValue(Node, 'FilterCopyLeft', gSyncDirsShowFilterCopyLeft);
     SetValue(Node, 'FilterDuplicates', gSyncDirsShowFilterDuplicates);
     SetValue(Node, 'FilterSingles', gSyncDirsShowFilterSingles);
     SetValue(Node, 'FileMask', gSyncDirsFileMask);
-    SubNode := FindNode(Node, 'Colors', True);
-    SetValue(SubNode, 'Left', gSyncLeftColor);
-    SetValue(SubNode, 'Right', gSyncRightColor);
-    SetValue(SubNode, 'Unknown', gSyncUnknownColor);
+    SetAttr(Node, 'FileMask/Save', gSyncDirsFileMaskSave);
+    SetValue(Node, 'DateTimeFormat', gDateTimeFormatSync);
 
     { Internal Associations}
     Node := FindNode(Root, 'InternalAssociations', True);
     SetValue(Node, 'OfferToAddNewFileType', gOfferToAddToFileAssociations);
     SetValue(Node, 'LastCustomAction', gFileAssociationLastCustomAction);
     SetValue(Node, 'ExpandedContextMenu', gExtendedContextMenu);
+    SetValue(Node, 'DefaultContextActions', gDefaultContextActions);
     SetValue(Node, 'ExecuteViaShell', gOpenExecuteViaShell);
     SetValue(Node, 'OpenSystemWithTerminalClose', gExecuteViaTerminalClose);
     SetValue(Node, 'OpenSystemWithTerminalStayOpen', gExecuteViaTerminalStayOpen);
@@ -3852,18 +3826,6 @@ begin
       SetValue(SubNode, 'ShowWholeBranchIfMatch', gTreeViewMenuOptions[iIndexContextMode].ShowWholeBranchIfMatch);
     end;
     SetValue(Node, 'TreeViewMenuUseKeyboardShortcut', gTreeViewMenuUseKeyboardShortcut);
-    SetValue(Node, 'BackgroundColor', gTVMBackgroundColor);
-    SetValue(Node, 'ShortcutColor', gTVMShortcutColor);
-    SetValue(Node, 'NormalTextColor', gTVMNormalTextColor);
-    SetValue(Node, 'SecondaryTextColor', gTVMSecondaryTextColor);
-    SetValue(Node, 'FoundTextColor', gTVMFoundTextColor);
-    SetValue(Node, 'UnselectableTextColor', gTVMUnselectableTextColor);
-    SetValue(Node, 'CursorColor', gTVMCursorColor);
-    SetValue(Node, 'ShortcutUnderCursor', gTVMShortcutUnderCursor);
-    SetValue(Node, 'NormalTextUnderCursor', gTVMNormalTextUnderCursor);
-    SetValue(Node, 'SecondaryTextUnderCursor', gTVMSecondaryTextUnderCursor);
-    SetValue(Node, 'FoundTextUnderCursor', gTVMFoundTextUnderCursor);
-    SetValue(Node,'UnselectableUnderCursor', gTVMUnselectableUnderCursor);
 
     { Favorite Tabs }
     Node := FindNode(Root, 'FavoriteTabsOptions', True);

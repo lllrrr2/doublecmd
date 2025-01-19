@@ -3,7 +3,7 @@ Compiling Double Commander
 1) What you need?
 
 Double Commander is developed with Free Pascal and Lazarus.
-Current version requires at least FPC 3.2.0 and Lazarus 2.0.12.
+Current version requires at least FPC 3.2.2 and Lazarus 2.2.0 (3.0 under macOS).
 
 2) Using the IDE to develop and build DC.
 
@@ -12,14 +12,14 @@ install a few additional components all of which reside in components
 directory of DC sources. You must open each .lpk package file:
 
 - chsdet/chsdet.lpk
-- CmdLine/cmdbox.lpk
 - multithreadprocs/multithreadprocslaz.lpk
-- dcpcrypt/dcpcrypt.lpk
+- kascrypt/kascrypt.lpk
 - doublecmd/doublecmd_common.lpk
 - gifanim/pkg_gifanim.lpk
 - KASToolBar/kascomp.lpk
 - synunihighlighter/synuni.lpk
 - viewer/viewerpackage.lpk
+- virtualterminal/virtualterminal.lpk
 
 and install it into Lazarus (menu: Package -> Open package file (.lpk) -> Browse
 to needed .lpk file -> Press "Install", if "Install" disabled then press

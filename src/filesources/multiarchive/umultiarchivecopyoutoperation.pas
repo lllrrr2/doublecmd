@@ -118,7 +118,9 @@ begin
   FStatistics := RetrieveStatistics;
   with FStatistics do
   begin
+    DoneBytes := -1;
     DoneFiles := -1;
+    RemainingTime := -1;
     CurrentFileDoneBytes := -1;
     UpdateStatistics(FStatistics);
   end;
@@ -126,11 +128,16 @@ end;
 
 destructor TMultiArchiveCopyOutOperation.Destroy;
 begin
-  FreeThenNil(FFullFilesTreeToExtract);
+  FreeAndNil(FFullFilesTreeToExtract);
   inherited Destroy;
 end;
 
 procedure TMultiArchiveCopyOutOperation.Initialize;
+var
+  Index: Integer;
+  ACount: Integer;
+  AFileName: String;
+  ArcFileList: TList;
 begin
   FExProcess:= TExProcess.Create(EmptyStr);
   FExProcess.OnReadLn:= @OnReadLn;
@@ -142,6 +149,30 @@ begin
   begin
     FExProcess.QueryString:= UTF8ToConsole(FPasswordQuery);
     FExProcess.OnQueryString:= @OnQueryString;
+  end;
+
+  if efSmartExtract in ExtractFlags then
+  begin
+    ACount:= 0;
+    ArcFileList := FMultiArchiveFileSource.ArchiveFileList.Clone;
+    try
+      for Index := 0 to ArcFileList.Count - 1 do
+      begin
+        AFileName := PathDelim + TArchiveItem(ArcFileList[Index]).FileName;
+
+        if IsInPath(PathDelim, AFileName, False, False) then
+        begin
+          Inc(ACount);
+          if (ACount > 1) then
+          begin
+            FTargetPath := FTargetPath + ExtractOnlyFileName(FMultiArchiveFileSource.ArchiveFileName) + PathDelim;
+            Break;
+          end;
+        end;
+      end;
+    finally
+      ArcFileList.Free;
+    end;
   end;
 
   AddStateChangedListener([fsosStarting, fsosPausing, fsosStopping], @FileSourceOperationStateChangedNotify);
@@ -183,9 +214,17 @@ begin
         CreateDirs(FFullFilesTreeToExtract, TargetPath, SourcePath, CreatedPaths);
         sCommandLine:= MultiArcItem.FExtract;
       end;
+    if not FExtractWithoutPath then
+    begin
+      sTempDir:= GetTempName(TargetPath);
+      mbCreateDir(sTempDir);
+    end;
     // Get maximum acceptable command errorlevel
     FErrorLevel:= ExtractErrorLevel(sCommandLine);
     if Pos('%F', sCommandLine) <> 0 then // extract file by file
+    begin
+      FStatistics.DoneBytes:= 0;
+
       for I:= 0 to FFullFilesTreeToExtract.Count - 1 do
       begin
         CheckOperationState;
@@ -203,8 +242,6 @@ begin
             if (DoFileExists(aFile, TargetFileName) <> fsoofeOverwrite) then
               Continue;
 
-            // Get target directory
-            sTempDir:= ExtractFileDirEx(TargetFileName);
 
             UpdateProgress(aFile.FullPath, TargetFileName, 0);
 
@@ -221,25 +258,25 @@ begin
             OnReadLn(sReadyCommand);
 
             // Set target directory as archiver current directory
-            FExProcess.Process.CurrentDirectory:= sTempDir;
+            if FExtractWithoutPath then
+              FExProcess.Process.CurrentDirectory:= TargetPath
+            else
+              FExProcess.Process.CurrentDirectory:= sTempDir;
+
             FExProcess.SetCmdLine(sReadyCommand);
             FExProcess.Execute;
+
+            if not FExtractWithoutPath then
+              mbRenameFile(sTempDir + PathDelim + aFile.FullPath, TargetFileName);
 
             UpdateProgress(aFile.FullPath, TargetFileName, aFile.Size);
             // Check for errors.
             CheckForErrors(aFile.FullPath, TargetFileName, FExProcess.ExitStatus);
           end;
     end // for
+  end
   else  // extract whole file list
     begin
-      sTempDir:= TargetPath; // directory where files will be unpacked
-      // if extract from not root directory and with path
-      if (SourceFiles.Path <> PathDelim) and (FExtractWithoutPath = False) then
-        begin
-          sTempDir:= GetTempName(TargetPath);
-          mbCreateDir(sTempDir);
-        end;
-
       // Check existence of target files
       FilesToExtract:= TFiles.Create(FFullFilesTreeToExtract.Path);
       for I:= 0 to FFullFilesTreeToExtract.Count - 1 do
@@ -255,6 +292,20 @@ begin
 
       if FilesToExtract.Count = 0 then Exit;
 
+      with FStatistics do
+      begin
+        if FilesToExtract.Count = 1 then
+        begin
+          FStatistics.CurrentFileFrom:= FilesToExtract[0].FullPath;
+          FStatistics.CurrentFileTo:= TargetFileName;
+        end
+        else begin
+          FStatistics.CurrentFileFrom:= SourceFiles.Path;
+          FStatistics.CurrentFileTo:= TargetPath;
+        end;
+        UpdateStatistics(FStatistics);
+      end;
+
       sReadyCommand:= FormatArchiverCommand(
                                             MultiArcItem.FArchiver,
                                             sCommandLine,
@@ -268,7 +319,11 @@ begin
       OnReadLn(sReadyCommand);
 
       // Set target directory as archiver current directory
-      FExProcess.Process.CurrentDirectory:= sTempDir;
+      if (SourceFiles.Path = PathDelim) or FExtractWithoutPath then
+        FExProcess.Process.CurrentDirectory:= TargetPath
+      else
+        FExProcess.Process.CurrentDirectory:= sTempDir;
+
       FExProcess.SetCmdLine(sReadyCommand);
       FExProcess.Execute;
 
@@ -278,6 +333,7 @@ begin
       // if extract from not root directory and with path
       if (SourceFiles.Path <> PathDelim) and (FExtractWithoutPath = False) then
       begin
+        FStatistics.DoneBytes:= 0;
         // move files to real target directory
         for I:= 0 to FilesToExtract.Count - 1 do
         begin
@@ -290,21 +346,24 @@ begin
               UpdateProgress(aFile.FullPath, TargetFileName, aFile.Size);
             end
         end;
-        DelTree(sTempDir);
       end;
     end;
 
-    if (FExtractWithoutPath = False) then SetDirsAttributes(CreatedPaths);
+    if not FExtractWithoutPath then
+    begin
+      SetDirsAttributes(CreatedPaths);
+      DelTree(sTempDir);
+    end;
 
   finally
-    FreeThenNil(CreatedPaths);
-    FreeThenNil(FilesToExtract);
+    FreeAndNil(CreatedPaths);
+    FreeAndNil(FilesToExtract);
   end;
 end;
 
 procedure TMultiArchiveCopyOutOperation.Finalize;
 begin
-  FreeThenNil(FExProcess);
+  FreeAndNil(FExProcess);
   with FMultiArchiveFileSource.MultiArcItem do
   if not FDebug then
     mbDeleteFile(FTempFile);
@@ -613,7 +672,7 @@ begin
       ShowError(Format(rsMsgLogError + rsMsgLogExtract,
                        [FMultiArchiveFileSource.ArchiveFileName + PathDelim +
                         SourceName + ' -> ' + TargetName +
-                        ' - Exit status: ' + IntToStr(ExitStatus)]), [log_arc_op]);
+                        ' - ' + rsMsgExitStatusCode + ' ' + IntToStr(ExitStatus)]), [log_arc_op]);
     end // Error
   else
     begin

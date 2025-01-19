@@ -51,7 +51,7 @@ implementation
 {$R *.lfm}
 
 uses
-  fOptions, LazUTF8Classes, uDebug, uFindEx, uGlobs, uGlobsPaths, uLng;
+  fOptions, DCClassesUtf8, uDebug, uFindEx, uGlobs, uGlobsPaths, uLng;
 
 { TfrmOptionsLanguage }
 
@@ -60,15 +60,15 @@ var
   iIndex: Integer;
   fr: TSearchRecEx;
   sLangName: String;
-  LanguageFileList: TStringListUtf8;
+  LanguageFileList: TStringListEx;
 begin
-  LanguageFileList:= TStringListUtf8.Create;
+  LanguageFileList:= TStringListEx.Create;
   LanguageFileList.Sorted:= True;
   LanguageFileList.Duplicates:= dupAccept;
   try
     lngList.Clear;
     DCDebug('Language directory: ' + gpLngDir);
-    if FindFirstEx(gpLngDir + '*.po', 0, fr) = 0 then
+    if FindFirstEx(gpLngDir + '*.po*', 0, fr) = 0 then
     repeat
       sLangName := GetLanguageName(gpLngDir + fr.Name);
       LanguageFileList.Add(Format('%s = %s', [sLangName, fr.Name]));

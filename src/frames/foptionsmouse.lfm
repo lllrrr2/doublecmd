@@ -1,6 +1,7 @@
 inherited frmOptionsMouse: TfrmOptionsMouse
   Height = 385
   Width = 488
+  HelpKeyword = '/configuration.html#ConfigMouse'
   ChildSizing.LeftRightSpacing = 6
   ChildSizing.TopBottomSpacing = 6
   ClientHeight = 385
@@ -154,6 +155,7 @@ inherited frmOptionsMouse: TfrmOptionsMouse
       BorderSpacing.Left = 18
       BorderSpacing.Top = 4
       BorderSpacing.Right = 8
+      MaxValue = 10
       MinValue = 1
       TabOrder = 2
       Value = 1

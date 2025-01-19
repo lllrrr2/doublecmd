@@ -38,6 +38,7 @@ interface
 uses
 {$IFDEF MSWINDOWS}
   Windows,
+  DCWindows,
   DCConvertEncoding,
 {$ENDIF}
 {$IFDEF LibcAPI}
@@ -321,8 +322,8 @@ const
   MinutesInDay    =  1440;  {Number of minutes in a day}
 
 
-  function AbUnixTimeToLocalDateTime(UnixTime : LongInt) : TDateTime;
-  function AbLocalDateTimeToUnixTime(DateTime : TDateTime) : LongInt;
+  function AbUnixTimeToLocalDateTime(UnixTime : Int64) : TDateTime;
+  function AbLocalDateTimeToUnixTime(DateTime : TDateTime) : Int64;
 
   function AbDosFileDateToDateTime(FileDate, FileTime : Word) : TDateTime;
   function AbDateTimeToDosFileDate(Value : TDateTime) : LongInt;
@@ -376,6 +377,7 @@ uses
   AbExcept,
   DCOSUtils,
   DCStrUtils,
+  DCBasicTypes,
   DCDateTimeUtils;
 
 (*
@@ -714,7 +716,7 @@ begin
 {$ENDIF MSWINDOWS}
 {$IFDEF UNIX}
 { UNIX absolute paths start with a slash }
-  if (Value[1] = AbPathDelim) then
+  if (Length(Value) > 0) and (Value[1] = AbPathDelim) then
 {$ENDIF UNIX}
     Result := ptAbsolute
   else if ( Pos( AbPathDelim, Value ) > 0 ) or ( Pos( AB_ZIPPATHDELIM, Value ) > 0 ) then
@@ -1038,7 +1040,7 @@ Result := Result * SecondsInMinute;
 end;
 {$ENDIF}
 { -------------------------------------------------------------------------- }
-function AbUnixTimeToLocalDateTime(UnixTime : LongInt) : TDateTime;
+function AbUnixTimeToLocalDateTime(UnixTime : Int64) : TDateTime;
 { convert UTC unix date to Delphi TDateTime in local timezone }
 {$IFDEF MSWINDOWS}
 var
@@ -1060,12 +1062,12 @@ begin
 {$ENDIF}
 {$IFDEF UNIX}
 begin
-  Result := FileDateToDateTime(UnixTime);
+  Result := UnixFileTimeToDateTime(TUnixFileTime(UnixTime));
 {$ENDIF}
 end;
 
 { -------------------------------------------------------------------------- }
-function AbLocalDateTimeToUnixTime(DateTime : TDateTime) : LongInt;
+function AbLocalDateTimeToUnixTime(DateTime : TDateTime) : Int64;
 { convert local Delphi TDateTime to UTC unix date }
 {$IFDEF MSWINDOWS}
 var
@@ -1085,7 +1087,7 @@ begin
 {$ENDIF}
 {$IFDEF UNIX}
 begin
-  Result := DateTimeToFileDate(DateTime);
+  Result := Int64(DateTimeToUnixFileTime(DateTime));
 {$ENDIF}
 end;
 { -------------------------------------------------------------------------- }
@@ -1178,7 +1180,9 @@ begin
   if (Attr and faReadOnly) = 0 then
     Result := Result or AB_FPERMISSION_OWNERWRITE;
 
-  if (Attr and faDirectory) <> 0 then
+  if (Attr and faSymLink) <> 0 then
+    Result := Result or AB_FMODE_FILELINK or AB_FPERMISSION_OWNEREXECUTE
+  else if (Attr and faDirectory) <> 0 then
     Result := Result or AB_FMODE_DIR or AB_FPERMISSION_OWNEREXECUTE
   else
     Result := Result or AB_FMODE_FILE;
@@ -1198,10 +1202,12 @@ begin
     AB_FMODE_DIR: { directory }
       Result := Result or faDirectory;
 
+    AB_FMODE_FILELINK: { symlink}
+      Result := Result or faSymLink;
+
     AB_FMODE_FIFO,
     AB_FMODE_CHARSPECFILE,
     AB_FMODE_BLOCKSPECFILE,
-    AB_FMODE_FILELINK,
     AB_FMODE_SOCKET:
       Result := Result or faSysFile;
   end;
@@ -1256,7 +1262,7 @@ begin
   aAttr.Attr := -1;
   aAttr.Mode := 0;
 {$IFDEF MSWINDOWS}
-  Result := GetFileAttributesExW(PWideChar(CeUtf8ToUtf16(aFileName)), GetFileExInfoStandard, @FindData);
+  Result := GetFileAttributesExW(PWideChar(UTF16LongName(aFileName)), GetFileExInfoStandard, @FindData);
   if Result then begin
     aAttr.Time := WinFileTimeToDateTime(FindData.ftLastWriteTime);
     LARGE_INTEGER(aAttr.Size).LowPart := FindData.nFileSizeLow;

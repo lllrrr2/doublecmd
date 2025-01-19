@@ -3,7 +3,7 @@
    -------------------------------------------------------------------------
    SevenZip archiver plugin
 
-   Copyright (C) 2017 Alexander Koblov (alexx2000@mail.ru)
+   Copyright (C) 2017-2025 Alexander Koblov (alexx2000@mail.ru)
 
    Based on Far Manager arclite plugin
 
@@ -52,7 +52,7 @@ type
 
     TLibraryInfo = class
     public
-      Handle: HINST;
+      Handle: TLibHandle;
       CreateObject: TCreateObjectFunc;
       GetHandlerProperty2: TGetHandlerProperty2;
       GetHandlerProperty: TGetHandlerProperty;
@@ -60,9 +60,9 @@ type
       GetNumberOfFormats: TGetNumberOfFormatsFunc;
       GetNumberOfMethods: TGetNumberOfMethodsFunc;
       SetLargePageMode: TSetLargePageMode;
-      SetCodecs: function(compressCodecsInfo: ICompressCodecsInfo): HRESULT; stdcall;
-      CreateDecoder: function(Index: Cardinal; IID: PGUID; out Decoder): HRESULT; stdcall;
-      CreateEncoder: function(Index: Cardinal; IID: PGUID; out Coder): HRESULT; stdcall;
+      SetCodecs: function(compressCodecsInfo: ICompressCodecsInfo): HRESULT; winapi;
+      CreateDecoder: function(Index: Cardinal; IID: PGUID; out Decoder): HRESULT; winapi;
+      CreateEncoder: function(Index: Cardinal; IID: PGUID; out Coder): HRESULT; winapi;
     end;
 
     { TCodecInfo }
@@ -75,7 +75,7 @@ type
       Encoder: CLSID;
       Decoder: CLSID;
       ID: Cardinal;
-      Name: WideString;
+      Name: UnicodeString;
     end;
 
     { TCompressCodecsInfo }
@@ -87,10 +87,10 @@ type
     public
       constructor Create(ACodecs: TFPGObjectList<TCodecInfo>; ALibraries: TFPGObjectList<TLibraryInfo>);
     public
-      function GetNumberOfMethods(NumMethods: PCardinal): HRESULT; stdcall;
-      function GetProperty(Index: Cardinal; PropID: TPropID; out Value: TPropVariant): HRESULT; stdcall;
-      function CreateDecoder(Index: Cardinal; IID: PGUID; out Decoder): HRESULT; stdcall;
-      function CreateEncoder(Index: Cardinal; IID: PGUID; out Coder): HRESULT; stdcall;
+      function GetNumberOfMethods(NumMethods: PCardinal): HRESULT; winapi;
+      function GetProperty(Index: Cardinal; PropID: TPropID; out Value: TPropVariant): HRESULT; winapi;
+      function CreateDecoder(Index: Cardinal; IID: PGUID; out Decoder): HRESULT; winapi;
+      function CreateEncoder(Index: Cardinal; IID: PGUID; out Coder): HRESULT; winapi;
     end;
 
 procedure LoadLibraries;
@@ -102,7 +102,7 @@ var
 implementation
 
 uses
-  LazUTF8, FileUtil;
+  LazUTF8, FileUtil, DCOSUtils, SevenZipHlp;
 
 { TCompressCodecsInfo }
 
@@ -113,14 +113,14 @@ begin
   FLibraries:= ALibraries;
 end;
 
-function TCompressCodecsInfo.GetNumberOfMethods(NumMethods: PCardinal): HRESULT; stdcall;
+function TCompressCodecsInfo.GetNumberOfMethods(NumMethods: PCardinal): HRESULT; winapi;
 begin
   NumMethods^:= FCodecs.Count;
   Result:= S_OK;
 end;
 
 function TCompressCodecsInfo.GetProperty(Index: Cardinal; PropID: TPropID; out
-  Value: TPropVariant): HRESULT; stdcall;
+  Value: TPropVariant): HRESULT; winapi;
 var
   ACodecInfo: TCodecInfo;
 begin
@@ -141,7 +141,7 @@ begin
 end;
 
 function TCompressCodecsInfo.CreateDecoder(Index: Cardinal; IID: PGUID; out
-  Decoder): HRESULT; stdcall;
+  Decoder): HRESULT; winapi;
 var
   ACodecInfo: TCodecInfo;
   ALibraryInfo: TLibraryInfo;
@@ -159,7 +159,7 @@ begin
 end;
 
 function TCompressCodecsInfo.CreateEncoder(Index: Cardinal; IID: PGUID; out
-  Coder): HRESULT; stdcall;
+  Coder): HRESULT; winapi;
 var
   ACodecInfo: TCodecInfo;
   ALibraryInfo: TLibraryInfo;
@@ -180,33 +180,56 @@ function GetCoderInfo(GetMethodProperty: TGetMethodProperty; Index: UInt32; var 
 var
   Value: TPropVariant;
 begin
+  Value.vt:= VT_EMPTY;
   if (GetMethodProperty(Index, kDecoder, Value) <> S_OK) then
     Exit(False);
   if (Value.vt <> VT_EMPTY) then
   begin
-    if (Value.vt <> VT_BSTR) or (SysStringByteLen(Value.bstrVal) < SizeOf(CLSID)) then
-      Exit(False);
-    AInfo.Decoder:= PGUID(Value.bstrVal)^;
-    AInfo.DecoderIsAssigned:= True;
+    if (Value.vt <> VT_BSTR) then Exit(False);
+    try
+      if (SysStringByteLen(Value.bstrVal) < SizeOf(CLSID)) then
+      begin
+        Exit(False);
+      end;
+      AInfo.Decoder:= PGUID(Value.bstrVal)^;
+      AInfo.DecoderIsAssigned:= True;
+    finally
+      VarStringClear(Value);
+    end;
   end;
 
   if (GetMethodProperty(Index, kEncoder, Value) <> S_OK) then
     Exit(False);
   if (Value.vt <> VT_EMPTY) then
   begin
-    if (Value.vt <> VT_BSTR) or (SysStringByteLen(Value.bstrVal) < SizeOf(CLSID)) then
-      Exit(False);
-    AInfo.Encoder:= PGUID(Value.bstrVal)^;
-    AInfo.EncoderIsAssigned:= True;
+    if (Value.vt <> VT_BSTR) then Exit(False);
+    try
+      if (SysStringByteLen(Value.bstrVal) < SizeOf(CLSID)) then
+      begin
+        Exit(False);
+      end;
+      AInfo.Encoder:= PGUID(Value.bstrVal)^;
+      AInfo.EncoderIsAssigned:= True;
+    finally
+      VarStringClear(Value);
+    end;
   end;
 
   if (GetMethodProperty(Index, kID, Value) <> S_OK) then
     Exit(False);
-  if (Value.vt <> VT_EMPTY) then AInfo.ID:= OleVariant(Value);
+  if (Value.vt <> VT_UI8) then
+    Exit(False);
+  AInfo.ID:= Value.uhVal.QuadPart;
 
+  Value.vt:= VT_EMPTY;
   if (GetMethodProperty(Index, kName, Value) <> S_OK) then
     Exit(False);
-  if (Value.vt = VT_BSTR) then AInfo.Name:= OleVariant(Value);
+  if (Value.vt = VT_BSTR) then
+  try
+    AInfo.Name:= BinaryToUnicode(Value.bstrVal);
+  finally
+    VarStringClear(Value);
+  end;
 
   Result:= AInfo.DecoderIsAssigned or AInfo.EncoderIsAssigned;
 end;
@@ -216,21 +239,28 @@ var
 
 procedure LoadCodecs;
 var
-  Handle: HINST;
+  Handle: TLibHandle;
   Index, J: Integer;
   AFiles: TStringList;
   ACodecCount: Integer;
   NumMethods: UInt32 = 1;
   ACodecInfo: TCodecInfo;
   ALibraryInfo: TLibraryInfo;
+  GetModuleProp: TGetModuleProp;
   ACompressInfo: ICompressCodecsInfo;
 begin
-  AFiles:= FindAllFiles(ExtractFilePath(SevenzipLibraryName) + 'Codecs', '*.dll');
+  AFiles:= FindAllFiles(ExtractFilePath(SevenzipLibraryName) + 'Codecs', '*.' + SharedSuffix);
   for Index:= 0 to AFiles.Count - 1 do
   begin
-    Handle:= LoadLibraryW(PWideChar(UTF8ToUTF16(AFiles[Index])));
+    Handle:= mbLoadLibrary(AFiles[Index]);
     if Handle <> 0 then
     begin
+      GetModuleProp:= GetProcAddress(Handle, 'GetModuleProp');
+      if not CheckModule(GetModuleProp) then
+      begin
+        FreeLibrary(Handle);
+        Continue;
+      end;
       ALibraryInfo:= TLibraryInfo.Create;
 
       ALibraryInfo.Handle:= Handle;
@@ -325,14 +355,17 @@ procedure Finish;
 var
   Index: Integer;
 begin
-  if Assigned(ALibraries) then begin
+  if Assigned(ALibraries) then
+  begin
     for Index:= 0 to ALibraries.Count - 1 do
     begin
       if Assigned(ALibraries[Index].SetCodecs) then
         ALibraries[Index].SetCodecs(nil);
       FreeLibrary(ALibraries[Index].Handle);
     end;
+    ALibraries.Free;
   end;
+  ACodecs.Free;
 end;
 
 finalization

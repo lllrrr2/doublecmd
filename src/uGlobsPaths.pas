@@ -10,6 +10,7 @@ var
   gpLngDir : String = '';  // path to language *.po files
   gpPixmapPath : String = '';  // path to pixmaps
   gpHighPath : String = ''; // editor highlighter directory
+  gpCacheDir : String = ''; // cache directory
   gpThumbCacheDir : String = ''; // thumbnails cache directory
 
 //Global Configuration Filename
@@ -22,7 +23,10 @@ procedure UpdateEnvironmentVariable;
 implementation
 
 uses
-  SysUtils, LazFileUtils, uDebug, uOSUtils, DCOSUtils, DCStrUtils, uSysFolders;
+  SysUtils, LazFileUtils, uDebug, DCOSUtils, DCStrUtils, uSysFolders;
+
+var
+  gpExeFile: String;
 
 function GetAppName : String;
 begin
@@ -32,15 +36,12 @@ end;
 procedure UpdateEnvironmentVariable;
 begin
   mbSetEnvironmentVariable('COMMANDER_INI', gpCfgDir + 'doublecmd.xml');
+  mbSetEnvironmentVariable('DC_CONFIG_PATH', ExcludeTrailingPathDelimiter(gpCfgDir));
+  mbSetEnvironmentVariable('COMMANDER_INI_PATH', ExcludeTrailingPathDelimiter(gpCfgDir));
 end;
 
 procedure LoadPaths;
 begin
-  OnGetApplicationName := @GetAppName;
-  gpExePath := ExtractFilePath(TryReadAllLinks(ParamStrU(0)));
-  DCDebug('Executable directory: ', gpExePath);
-  
-  gpGlobalCfgDir := gpExePath;
   if gpCmdLineCfgDir <> EmptyStr then
   begin
     if GetPathType(gpCmdLineCfgDir) <> ptAbsolute then
@@ -58,17 +59,38 @@ begin
       gpCfgDir := gpGlobalCfgDir;
     end;
   end;
+  if gpCfgDir <> gpGlobalCfgDir then
+    gpCacheDir := GetAppCacheDir
+  else begin
+    gpCacheDir := gpExePath + 'cache';
+  end;
+  DCDebug('Executable directory: ', gpExePath);
+  DCDebug('Configuration directory: ', gpCfgDir);
+  DCDebug('Global configuration directory: ', gpGlobalCfgDir);
 
   gpCfgDir := IncludeTrailingPathDelimiter(gpCfgDir);
   gpLngDir := gpExePath + 'language' + DirectorySeparator;
   gpPixmapPath := gpExePath + 'pixmaps' + DirectorySeparator;
   gpHighPath:= gpExePath + 'highlighters' + DirectorySeparator;
-  gpThumbCacheDir := GetAppCacheDir + PathDelim + 'thumbnails';
+  gpThumbCacheDir := gpCacheDir + PathDelim + 'thumbnails';
 
   // set up environment variables
   UpdateEnvironmentVariable;
+  mbSetEnvironmentVariable('COMMANDER_EXE', gpExeFile);
   mbSetEnvironmentVariable('COMMANDER_DRIVE', ExtractRootDir(gpExePath));
   mbSetEnvironmentVariable('COMMANDER_PATH', ExcludeTrailingBackslash(gpExePath));
 end;
+
+procedure Initialize;
+begin
+  gpExeFile := ParamStr(0);
+  OnGetApplicationName := @GetAppName;
+  gpExeFile := TryReadAllLinks(gpExeFile);
+  gpExePath := ExtractFilePath(gpExeFile);
+  gpGlobalCfgDir := gpExePath + 'settings' + DirectorySeparator;
+end;
+
+initialization
+  Initialize;
 
 end.

@@ -1,8 +1,9 @@
-{ $threading on}
 program doublecmd;
-{%File 'doc/changelog.txt'}
 
-{.$APPTYPE GUI}
+{$IF DEFINED(LCLGTK3)}
+{$FATAL LCLGTK3 is not production ready}
+{$ENDIF}
+
 uses
   {$IFDEF MSWINDOWS}
   uElevation,
@@ -10,18 +11,17 @@ uses
   uDarkStyle,
   {$ENDIF}
   {$ENDIF}
-  {$IF DEFINED(WIN64) AND (FPC_FULLVERSION < 30000)}
-  uExceptionHandlerFix,
-  {$ENDIF}
   {$IFDEF UNIX}
-  cthreads,
   {$IFNDEF HEAPTRC}
   cmem,
   {$ENDIF}
+  cthreads,
+  {$IFDEF DARWIN}
+  iosxwstr,
+  iosxlocale,
+  {$ELSE}
   cwstring,
   clocale,
-  {$IFDEF DARWIN}
-  uAppleMagnifiedModeFix,
   {$ENDIF}
   uElevation,
   {$IFDEF LINUX}
@@ -36,14 +36,20 @@ uses
   uQt5Workaround,
   {$ENDIF}
   {$ENDIF}
+  uSystem,
+  Interfaces,
+  uMoveConfig,
   uEarlyConfig,
   DCConvertEncoding,
   {$IF DEFINED(LCLWIN32) and DEFINED(DARKWIN)}
   uWin32WidgetSetDark,
   {$ENDIF}
-  Interfaces,
   {$IFDEF LCLGTK2}
   uGtk2FixCursorPos,
+  {$ENDIF}
+  {$IFDEF darwin}
+  uAppleMagnifiedModeFix,
+  uMyDarwin,
   {$ENDIF}
   {$IFDEF LCLWIN32}
   uDClass,
@@ -86,6 +92,12 @@ uses
   {$IFDEF UNIX}
   , uMyUnix
   {$ENDIF}
+  {$IFDEF LclCocoa}
+{$if NOT defined(DisableCocoaModernForm)}
+  ,uCocoaModernFormConfig
+{$endif}
+  ,CocoaConfig
+  {$ENDIF}
   ;
 
 {$R *.res}
@@ -101,13 +113,13 @@ var
 {$ENDIF}
 
 begin
+  // Initialize again
+  uSystem.Initialize;
+
   DCDebug('Starting Double Commander');
 
   // Initialize random number generator
   Randomize;
-
-  // Disable invalid floating point operation exception
-  SetExceptionMask(GetExceptionMask + [exInvalidOp, exZeroDivide]);
 
   {$IF DEFINED(NIGHTLY_BUILD)}
   InitLineInfo;
@@ -121,13 +133,10 @@ begin
   {$ENDIF}
 
   {$IFDEF MSWINDOWS}
-  uMyWindows.InitErrorMode;
   uMyWindows.FixCommandLineToUTF8;
   {$ENDIF}
 
-  {$if lcl_fullversion >= 1070000}
   Application.Scaled:= True;
-  {$endif}
 
   // Fix default BidiMode
   // see http://bugs.freepascal.org/view.php?id=22044
@@ -136,7 +145,9 @@ begin
   Application.Title:='Double Commander';
   Application.Initialize;
 
-{$IF DEFINED(DARWIN) AND DEFINED(LCLQT)}
+{$IF DEFINED(DARWIN)}
+  GetMacFormatSettings(DefaultFormatSettings);
+  CocoaConfigGlobal.useIcon:= True;
   Application.Icon:= nil;
 {$ENDIF}
 
@@ -149,17 +160,23 @@ begin
   ApplyDarkStyle;
 {$ENDIF}
 
+{$IF DEFINED(darwin)}
+  FixMacFormatSettings;
+  setMacOSAppearance( gAppMode );
+{$ENDIF}
+
   // Use only current directory separator
   AllowDirectorySeparators:= [DirectorySeparator];
-  {$IF lcl_fullversion >= 093100}
   // Disable because we set a few of our own format settings and we don't want
   // them to be changed. There's no way currently to react to Application.IntfSettingsChange.
   // If in future we move to a Unicode RTL this could be removed.
   {$PUSH}{$WARN SYMBOL_PLATFORM OFF}
   Application.UpdateFormatSettings := False;
   {$POP}
-  {$ENDIF}
-  DefaultFormatSettings.ThousandSeparator:= ' ';
+  if Ord(DefaultFormatSettings.ThousandSeparator) > $7F then
+  begin
+    DefaultFormatSettings.ThousandSeparator:= ' ';
+  end;
   {$IFDEF UNIX}
   uMyUnix.FixDateTimeSeparators;
   {$ENDIF}
@@ -173,14 +190,13 @@ begin
   DCDebug('Free Pascal: ' + fpcVersion);
   DCDebug('Platform: ' + TargetCPU + '-' + TargetOS + '-' + TargetWS);
   DCDebug('System: ' + OSVersion);
-  {$IF DEFINED(UNIX) AND NOT DEFINED(DARWIN)}
+  {$IF DEFINED(UNIX) AND NOT (DEFINED(DARWIN) OR DEFINED(HAIKU))}
   DCDebug('Desktop Environment: ' + DesktopName[DesktopEnv]);
   {$ENDIF}
   if WSVersion <> EmptyStr then
     DCDebug('Widgetset library: ' + WSVersion);
   DCDebug('This program is free software released under terms of GNU GPL 2');
-  DCDebug('(C)opyright 2006-2022 Alexander Koblov (alexx2000@mail.ru)');
-  DCDebug('   and contributors (see about dialog)');
+  DCDebug(Copyright + LineEnding + '   and contributors (see about dialog)');
 
   Application.ShowMainForm:= False;
   Application.CreateForm(TfrmHackForm, frmHackForm);
@@ -191,7 +207,6 @@ begin
   begin
     // Let's show the starting slash screen to confirm user application has been started
     Application.CreateForm(TfrmStartingSplash, frmStartingSplash);
-    frmStartingSplash.Show;
   end;
 
   LoadInMemoryOurAccentLookupTableList; // Used for conversion of string to remove accents.
@@ -211,12 +226,14 @@ begin
 
       InitPasswordStore;
       LoadPixMapManager;
+{$IF DEFINED(DARWIN)}
+      initCocoaModernFormConfig;
+{$ENDIF}
       Application.CreateForm(TfrmMain, frmMain); // main form
-      Application.CreateForm(TdmHighl, dmHighl); // highlighters
       Application.CreateForm(TdmComData, dmComData); // common data
       Application.CreateForm(TdmHelpManager, dmHelpMgr); // help manager
 
-      {$IF DEFINED(LCLGTK2) AND (lcl_fullversion >= 093100)}
+      {$IF DEFINED(LCLGTK2)}
       // LCLGTK2 uses Application.MainForm as the clipboard widget, however our
       // MainForm is TfrmHackForm and it never gets realized. GTK2 doesn't
       // seem to allow a not realized widget to have clipboard ownership.
@@ -228,15 +245,8 @@ begin
       // in Application.CreateForm above.
       uKeyboard.HookKeyboardLayoutChanged;
 
-      if (gSplashForm) and (not CommandLineParams.NoSplash) then
-      begin
-        // We may now remove the starting splash screen, most of the application has been started now
-        frmStartingSplash.Close;
-        frmStartingSplash.Release;
-      end;
-
       frmMain.ShowOnTop;
-
+      Application.ProcessMessages;
       Application.Run;
 
       if not UniqueInstance.isAnotherDCRunningWhileIamRunning then

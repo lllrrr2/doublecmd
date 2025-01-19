@@ -21,6 +21,7 @@
  *
  * Contributor(s):
  * Craig Peterson <capeterson@users.sourceforge.net>
+ * Alexander Koblov <alexx2000@users.sourceforge.net>
  *
  * ***** END LICENSE BLOCK ***** *)
 
@@ -197,10 +198,12 @@ type
     function GetGzCRC: LongInt;
     function GetFileSize: LongInt;
   protected {private}
-    FItem : TAbGzipItem;
-    FTail : TAbGzTailRec;
+    FItem    : TAbGzipItem;
+    FTail    : TAbGzTailRec;
+    FArchive : TAbArchive;
   public
-    constructor Create(AStream : TStream);
+    constructor Create(AStream : TStream); overload;
+    constructor Create(Archive : TAbArchive; AStream : TStream); overload;
     destructor Destroy; override;
 
     procedure ExtractItemData(AStream : TStream); override;
@@ -233,7 +236,6 @@ type
     FGZItem    : TAbArchiveList; { item in Gzip (only one, but need polymorphism of class)}
     FTarStream : TStream;        { stream for possible contained Tar }
     FTarList   : TAbArchiveList; { items in possible contained Tar }
-    FTarAutoHandle: Boolean;
     FState     : TAbGzipArchiveState;
     FIsGzippedTar : Boolean;
 
@@ -257,6 +259,8 @@ type
     procedure TestItemAt(Index : Integer);
       override;
     function FixName(const Value : string) : string;
+      override;
+    function GetStreamMode : Boolean;
       override;
     function GetSupportsEmptyFolders : Boolean;
       override;
@@ -289,11 +293,8 @@ function GZOsToStr(OS: Byte) : string;
 implementation
 
 uses
-  {$IFDEF MSWINDOWS}
-  Windows,
-  {$ENDIF}
-  SysUtils,
-  AbBitBkt, AbDfBase, AbDfDec, AbZlibPrc, AbExcept, AbResString, AbProgress,
+  SysUtils, BufStream,
+  AbBitBkt, AbDfBase, AbGz, AbZlibPrc, AbExcept, AbResString, AbProgress,
   AbVMStrm, DCOSUtils, DCClassesUtf8, DCConvertEncoding;
 
 const
@@ -464,10 +465,16 @@ end;
 
 { TAbGzipStreamHelper }
 
-constructor TAbGzipStreamHelper.Create(AStream : TStream);
+constructor TAbGzipStreamHelper.Create(AStream: TStream);
 begin
   inherited Create(AStream);
   FItem := TAbGzipItem.Create;
+end;
+
+constructor TAbGzipStreamHelper.Create(Archive : TAbArchive; AStream: TStream);
+begin
+  Create(AStream);
+  FArchive := Archive;
 end;
 
 destructor TAbGzipStreamHelper.Destroy;
@@ -575,6 +582,12 @@ var
 begin
   Helper := TAbDeflateHelper.Create;
   try
+    case FArchive.CompressionLevel of
+      1 : Helper.PKZipOption := 's';
+      3 : Helper.PKZipOption := 'f';
+      6 : Helper.PKZipOption := 'n';
+      9 : Helper.PKZipOption := 'x';
+    end;
     FItem.CRC32 := Deflate(AStream, FStream, Helper);
     FItem.UncompressedSize := AStream.Size;
   finally
@@ -886,7 +899,6 @@ begin
   FState     := gsGzip;
   FGZStream  := FStream;
   FGZItem    := FItemList;
-  FTarStream := TAbVirtualMemoryStream.Create;
   FTarList   := TAbArchiveList.Create(True);
 end;
 
@@ -985,7 +997,7 @@ procedure TAbGzipArchive.ExtractItemToStreamAt(Index: Integer;
   aStream: TStream);
 var
   GzHelp  : TAbGzipStreamHelper;
-  ProxyStream : TAbProgressStream;
+  ProxyStream : TAbProgressReadStream;
 begin
   if IsGzippedTar and TarAutoHandle then begin
     SwapToTar;
@@ -995,7 +1007,7 @@ begin
     SwapToGzip;
     { note Index ignored as there's only one item in a GZip }
 
-    ProxyStream := TAbProgressStream.Create(FGzStream, FOnProgress);
+    ProxyStream := TAbProgressReadStream.Create(FGzStream, FOnProgress);
     try
       GZHelp := TAbGzipStreamHelper.Create(ProxyStream);
       try
@@ -1055,6 +1067,11 @@ begin
   end;
 end;
 
+function TAbGzipArchive.GetStreamMode: Boolean;
+begin
+  Result := FIsGzippedTar and (inherited GetStreamMode);
+end;
+
 function TAbGzipArchive.GetIsGzippedTar: Boolean;
 begin
   Result := FIsGzippedTar;
@@ -1096,14 +1113,23 @@ begin
         if IsGzippedTar and TarAutoHandle then begin
           { extract Tar and set stream up }
           FGzStream.Seek(0, soBeginning);
-          GzHelp.ReadHeader;
-          repeat
-            GzHelp.ExtractItemData(FTarStream);
-            GzHelp.ReadTail;
+          { Decompress and load archive on the fly }
+          if OpenMode <> opModify  then
+          begin
+            FTarStream := TGzDecompressionStream.Create(FGzStream);
+            SwapToTar;
+          end
+          else begin
+            FTarStream := TAbVirtualMemoryStream.Create;
             GzHelp.ReadHeader;
-          until not VerifyHeader(GZHelp.FItem.FGzHeader);
-          SwapToTar;
-          inherited LoadArchive;
+            repeat
+              GzHelp.ExtractItemData(FTarStream);
+              GzHelp.ReadTail;
+              GzHelp.ReadHeader;
+            until not VerifyHeader(GZHelp.FItem.FGzHeader);
+            SwapToTar;
+            inherited LoadArchive;
+          end;
         end;
       end;
 
@@ -1125,6 +1151,7 @@ end;
 procedure TAbGzipArchive.SaveArchive;
 var
   InGzHelp, OutGzHelp : TAbGzipStreamHelper;
+  CompStream          : TDeflateStream;
   Abort               : Boolean;
   i                   : Integer;
   NewStream           : TStream;
@@ -1132,13 +1159,14 @@ var
   CurItem             : TAbGzipItem;
   CreateArchive       : Boolean;
   ATempName           : String;
+  Tail                : TAbGzTailRec;
 begin
   {prepare for the try..finally}
   OutGzHelp := nil;
   NewStream := nil;
 
   try
-    InGzHelp := TAbGzipStreamHelper.Create(FGzStream);
+    InGzHelp := TAbGzipStreamHelper.Create(Self, FGzStream);
 
     try
       {init new archive stream}
@@ -1146,32 +1174,38 @@ begin
       if CreateArchive then
         NewStream := FGzStream
       else begin
-        ATempName := Copy(ExtractFileName(FArchiveName), 1, MAX_PATH div 2) + '~';
-        ATempName := GetTempName(ExtractFilePath(FArchiveName) + ATempName) + '.tmp';
+        ATempName := GetTempName(FArchiveName);
         NewStream := TFileStreamEx.Create(ATempName, fmCreate or fmShareDenyWrite);
       end;
-      OutGzHelp := TAbGzipStreamHelper.Create(NewStream);
+      OutGzHelp := TAbGzipStreamHelper.Create(Self, NewStream);
 
       { save the Tar data }
       if IsGzippedTar and TarAutoHandle then begin
         SwapToTar;
-        inherited SaveArchive;
-        if FTarStream.Size > 0 then
-        begin
-          if FGZItem.Count = 0 then begin
-            CurItem := TAbGzipItem.Create;
-            FGZItem.Add(CurItem);
-          end;
-          CurItem := FGZItem[0] as TAbGzipItem;
-          CurItem.Action := aaNone;
-          CurItem.LastModTimeAsDateTime := Now;
-          CurItem.SaveGzHeaderToStream(NewStream);
-          FTarStream.Position := 0;
-          OutGzHelp.WriteArchiveItem(FTarStream);
-          CurItem.CRC32 := OutGzHelp.CRC;
-          CurItem.UncompressedSize := OutGzHelp.FileSize;
-          OutGzHelp.WriteArchiveTail;
+        if FGZItem.Count = 0 then begin
+          CurItem := TAbGzipItem.Create;
+          FGZItem.Add(CurItem);
         end;
+        CurItem := FGZItem[0] as TAbGzipItem;
+        CurItem.Action := aaNone;
+        CurItem.LastModTimeAsDateTime := Now;
+        CurItem.SaveGzHeaderToStream(NewStream);
+        CompStream := TDeflateStream.Create(CompressionLevel, NewStream);
+        try
+          FTargetStream := TWriteBufStream.Create(CompStream, $40000);
+          try
+            inherited SaveArchive;
+          finally
+            FreeAndNil(FTargetStream);
+          end;
+          CurItem.CRC32 := LongInt(CompStream.Hash);
+          CurItem.UncompressedSize := CompStream.Seek(0, soCurrent);
+        finally
+          CompStream.Free;
+        end;
+        Tail.CRC32 := CurItem.CRC32;
+        Tail.ISize := CurItem.UncompressedSize;
+        NewStream.Write(Tail, SizeOf(TAbGzTailRec));
       end
       else begin
         SwapToGzip;
@@ -1203,14 +1237,28 @@ begin
                 end
                 else begin
                   CurItem.LastModTimeAsDateTime := AbGetFileTime(CurItem.DiskFileName);
-                  UncompressedStream := TAbProgressFileStream.Create(CurItem.DiskFileName,
-                      fmOpenRead or fmShareDenyWrite, OnProgress);
+                  UncompressedStream := TFileStreamEx.Create(CurItem.DiskFileName,
+                      fmOpenRead or fmShareDenyWrite);
 
                   try
                     CurItem.UncompressedSize := UncompressedStream.Size;
                     CurItem.SaveGzHeaderToStream(NewStream);
-                    OutGzHelp.WriteArchiveItem(UncompressedStream);
-                    OutGzHelp.WriteArchiveTail;
+                    CompStream := TDeflateStream.Create(CompressionLevel, NewStream);
+                    try
+                      with TAbProgressWriteStream.Create(CompStream, CurItem.UncompressedSize, OnProgress) do
+                      try
+                        CopyFrom(UncompressedStream, CurItem.UncompressedSize);
+                      finally
+                        Free;
+                      end;
+                      CurItem.CRC32 := LongInt(CompStream.Hash);
+                      CurItem.UncompressedSize := CompStream.Seek(0, soCurrent);
+                    finally
+                      CompStream.Free;
+                    end;
+                    Tail.CRC32 := CurItem.CRC32;
+                    Tail.ISize := CurItem.UncompressedSize;
+                    NewStream.Write(Tail, SizeOf(TAbGzTailRec));
 
                   finally {UncompressedStream}
                     UncompressedStream.Free;

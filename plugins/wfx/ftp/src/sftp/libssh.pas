@@ -145,6 +145,17 @@ const
 type
   //* Session API */
   PLIBSSH2_SESSION = type Pointer;
+  //* Agent API */
+  PLIBSSH2_AGENT = type Pointer;
+  libssh2_agent_publickey = record
+    magic: cuint;
+    node: Pointer;
+    blob: PByte;
+    blob_len: csize_t;
+    comment: PAnsiChar;
+  end;
+  Plibssh2_agent_publickey = ^libssh2_agent_publickey;
+  PPlibssh2_agent_publickey = ^Plibssh2_agent_publickey;
   //* Channel API */
   PLIBSSH2_CHANNEL = type Pointer;
   //* SFTP API */
@@ -221,6 +232,7 @@ var
   libssh2_session_last_error: function(session: PLIBSSH2_SESSION; errmsg: PPAnsiChar;
                                        errmsg_len: pcint; want_buf: cint): cint; cdecl;
   //* Userauth API */
+  libssh2_userauth_authenticated: function(session: PLIBSSH2_SESSION): cint; cdecl;
   libssh2_userauth_list: function(session: PLIBSSH2_SESSION;
                                   const username: PAnsiChar; username_len: cuint): PAnsiChar; cdecl;
   libssh2_userauth_password_ex: function(session: PLIBSSH2_SESSION;
@@ -236,6 +248,14 @@ var
   libssh2_userauth_publickey_fromfile_ex: function(session: PLIBSSH2_SESSION;
                                                    const username: PAnsiChar; username_len: cuint;
                                                    const publickey, privatekey, passphrase: PAnsiChar): cint; cdecl;
+  //* Agent API */
+  libssh2_agent_init: function(session: PLIBSSH2_SESSION): PLIBSSH2_AGENT; cdecl;
+  libssh2_agent_connect: function(agent: PLIBSSH2_AGENT): cint; cdecl;
+  libssh2_agent_list_identities: function(agent: PLIBSSH2_AGENT): cint; cdecl;
+  libssh2_agent_get_identity: function(agent: PLIBSSH2_AGENT; store: PPlibssh2_agent_publickey; prev: Plibssh2_agent_publickey): cint; cdecl;
+  libssh2_agent_userauth: function(agent: PLIBSSH2_AGENT; const username: PAnsiChar; identity: Plibssh2_agent_publickey): cint; cdecl;
+  libssh2_agent_disconnect: function(agent: PLIBSSH2_AGENT): cint; cdecl;
+  libssh2_agent_free: procedure(agent: PLIBSSH2_AGENT); cdecl;
   //* Channel API */
   libssh2_channel_open_ex: function(session: PLIBSSH2_SESSION; const channel_type: PAnsiChar;
                           channel_type_len, window_size, packet_size: cuint;
@@ -540,8 +560,18 @@ begin
     //* Userauth API */
     libssh2_userauth_list:= SafeGetProcAddress(libssh2, 'libssh2_userauth_list');
     libssh2_userauth_password_ex:= SafeGetProcAddress(libssh2, 'libssh2_userauth_password_ex');
+    libssh2_userauth_authenticated:= SafeGetProcAddress(libssh2, 'libssh2_userauth_authenticated');
     libssh2_userauth_keyboard_interactive_ex:= SafeGetProcAddress(libssh2, 'libssh2_userauth_keyboard_interactive_ex');
     libssh2_userauth_publickey_fromfile_ex:= SafeGetProcAddress(libssh2, 'libssh2_userauth_publickey_fromfile_ex');
+
+    //* Agent API */
+    libssh2_agent_init:= SafeGetProcAddress(libssh2, 'libssh2_agent_init');
+    libssh2_agent_connect:= SafeGetProcAddress(libssh2, 'libssh2_agent_connect');
+    libssh2_agent_list_identities:= SafeGetProcAddress(libssh2, 'libssh2_agent_list_identities');
+    libssh2_agent_get_identity:= SafeGetProcAddress(libssh2, 'libssh2_agent_get_identity');
+    libssh2_agent_userauth:= SafeGetProcAddress(libssh2, 'libssh2_agent_userauth');
+    libssh2_agent_disconnect:= SafeGetProcAddress(libssh2, 'libssh2_agent_disconnect');
+    libssh2_agent_free:= SafeGetProcAddress(libssh2, 'libssh2_agent_free');
 
     //* Channel API */
     libssh2_channel_open_ex:= SafeGetProcAddress(libssh2, 'libssh2_channel_open_ex');

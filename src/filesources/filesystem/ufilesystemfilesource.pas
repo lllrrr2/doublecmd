@@ -9,8 +9,9 @@ uses
   uFileSourceOperation,
   uFileSourceOperationTypes,
   uLocalFileSource,
-  uFileSource,
+  uFileSource, uFileSourceManager,
   uFileSourceProperty,
+  uFileSourceUtil,
   uFileProperty,
   uFile,
   uDescr,
@@ -45,6 +46,10 @@ type
     constructor Create; override;
     destructor Destroy; override;
 
+    function GetProcessor: TFileSourceProcessor; override;
+    function GetRealPath(const APath: String): String; virtual;
+    function GetVirtualPath(const APath: String): String; virtual;
+
     class function CreateFile(const APath: String): TFile; override;
     class function CreateFile(const APath: String; pSearchRecord: PSearchRecEx): TFile; overload;
     {en
@@ -67,7 +72,7 @@ type
                                            const FileNamesList: TStringList;
                                            OmitNotExisting: Boolean = False): TFiles;
 
-    procedure RetrieveProperties(AFile: TFile; PropertiesToSet: TFilePropertiesTypes; AVariantProperties: array of String); override;
+    procedure RetrieveProperties(AFile: TFile; PropertiesToSet: TFilePropertiesTypes; const AVariantProperties: array of String); override;
 
     class function GetFileSource: IFileSystemFileSource;
 
@@ -116,6 +121,15 @@ type
     property Description: TDescription read FDescr;
   end;
 
+  { TFileSystemFileSourceProcessor }
+
+  TFileSystemFileSourceProcessor = class( TDefaultFileSourceProcessor )
+  private
+    procedure consultCopyOperation( var params: TFileSourceConsultParams );
+  public
+    procedure consultOperation( var params: TFileSourceConsultParams ); override;
+  end;
+
   { TFileSystemFileSourceConnection }
 
   TFileSystemFileSourceConnection = class(TFileSourceConnection)
@@ -131,7 +145,7 @@ uses
   DCWindows, uMyWindows, Windows,
 {$ENDIF}
 {$IFDEF UNIX}
-  BaseUnix, uUsersGroups, LazUTF8, uMyUnix,
+  BaseUnix, uUsersGroups, LazUTF8, DCUnix, uMyUnix,
   {$IFDEF DARWIN}
   uMyDarwin,
   {$ENDIF}
@@ -153,6 +167,9 @@ uses
   uFileSystemCalcStatisticsOperation,
   uFileSystemSetFilePropertyOperation;
 
+var
+  fileSystemFileSourceProcessor: TFileSystemFileSourceProcessor;
+
 {$IF DEFINED(MSWINDOWS)}
 
 procedure SetOwner(AFile: TFile);
@@ -170,12 +187,33 @@ begin
   end;
 end;
 
+procedure FillLinkProperty(const AFilePath: String; dwAttrs: DWORD; LinkProperty: TFileLinkProperty);
+var
+  LinkAttrs: TFileAttrs;
+begin
+  LinkProperty.LinkTo := ReadSymLink(AFilePath);
+
+  if StrBegins(LinkProperty.LinkTo, 'Volume{') then
+  begin
+    LinkProperty.IsLinkToDirectory := True;
+    LinkProperty.IsValid:= mbDriveReady(AFilePath + PathDelim);
+  end
+  else begin
+    LinkAttrs := mbFileGetAttrNoLinks(AFilePath);
+    LinkProperty.IsValid := LinkAttrs <> faInvalidAttributes;
+    if LinkProperty.IsValid then
+      LinkProperty.IsLinkToDirectory := fpS_ISDIR(LinkAttrs)
+    else begin
+      // On Windows links to directories are marked with Directory flag on the link.
+      LinkProperty.IsLinkToDirectory := fpS_ISDIR(dwAttrs);
+    end;
+  end;
+end;
+
 procedure FillFromFindData(
   AFile: TFile;
   AFilePath: String;
   pFindData: PWIN32FINDDATAW);
-var
-  LinkAttrs: TFileAttrs;
 begin
   with AFile do
   begin
@@ -198,14 +236,7 @@ begin
 
     if fpS_ISLNK(pFindData^.dwFileAttributes) then
     begin
-      LinkAttrs := mbFileGetAttrNoLinks(AFilePath);
-      LinkProperty.LinkTo := ReadSymLink(AFilePath);
-      LinkProperty.IsValid := LinkAttrs <> faInvalidAttributes;
-      if LinkProperty.IsValid then
-        LinkProperty.IsLinkToDirectory := fpS_ISDIR(LinkAttrs)
-      else
-        // On Windows links to directories are marked with Directory flag on the link.
-        LinkProperty.IsLinkToDirectory := fpS_ISDIR(pFindData^.dwFileAttributes);
+      FillLinkProperty(AFilePath, pFindData^.dwFileAttributes, LinkProperty);
     end;
   end;
 end;
@@ -215,7 +246,7 @@ end;
 procedure FillFromStat(
   AFile: TFile;
   AFilePath: String;
-  pStatInfo: BaseUnix.PStat);
+  pStatInfo: PDCStat);
 var
   LinkStatInfo: BaseUnix.Stat;
 begin
@@ -231,11 +262,11 @@ begin
       SizeProperty := TFileSizeProperty.Create(Int64(pStatInfo^.st_size));
 
     ModificationTimeProperty := TFileModificationDateTimeProperty.Create(
-      FileTimeToDateTime(pStatInfo^.st_mtime));
+      FileTimeToDateTimeEx(pStatInfo^.mtime));
     Properties[fpChangeTime] := TFileChangeDateTimeProperty.Create(
-      FileTimeToDateTime(pStatInfo^.st_ctime));
+      FileTimeToDateTimeEx(pStatInfo^.ctime));
     LastAccessTimeProperty := TFileLastAccessDateTimeProperty.Create(
-      FileTimeToDateTime(pStatInfo^.st_atime));
+      FileTimeToDateTimeEx(pStatInfo^.atime));
 
     LinkProperty := TFileLinkProperty.Create;
 
@@ -303,6 +334,21 @@ begin
   FDescr.Free;
 end;
 
+function TFileSystemFileSource.GetProcessor: TFileSourceProcessor;
+begin
+  Result:= fileSystemFileSourceProcessor;
+end;
+
+function TFileSystemFileSource.GetRealPath(const APath: String): String;
+begin
+  Result:= APath;
+end;
+
+function TFileSystemFileSource.GetVirtualPath(const APath: String): String;
+begin
+  Result:= APath;
+end;
+
 class function TFileSystemFileSource.CreateFile(const APath: String): TFile;
 begin
   Result := TFile.Create(APath);
@@ -331,21 +377,25 @@ begin
   with Result do
   begin
 {$IF DEFINED(UNIX)}
-    ChangeTimeProperty := TFileChangeDateTimeProperty.Create(DCBasicTypes.TFileTime(pSearchRecord^.PlatformTime));
+    ChangeTimeProperty := TFileChangeDateTimeProperty.Create(UnixFileTimeToDateTimeEx(pSearchRecord^.FindData.ctime));
+    {$IF DEFINED(DARWIN)}
+    CreationTimeProperty := TFileCreationDateTimeProperty.Create(UnixFileTimeToDateTimeEx(pSearchRecord^.FindData.birthtime));
+    {$ENDIF}
+    ModificationTimeProperty := TFileModificationDateTimeProperty.Create(UnixFileTimeToDateTimeEx(pSearchRecord^.FindData.mtime));
+    LastAccessTimeProperty := TFileLastAccessDateTimeProperty.Create(UnixFileTimeToDateTimeEx(pSearchRecord^.FindData.atime));
 {$ELSE}
     CreationTimeProperty := TFileCreationDateTimeProperty.Create(DCBasicTypes.TFileTime(pSearchRecord^.PlatformTime));
+    ModificationTimeProperty := TFileModificationDateTimeProperty.Create(pSearchRecord^.Time);
+    LastAccessTimeProperty := TFileLastAccessDateTimeProperty.Create(DCBasicTypes.TFileTime(pSearchRecord^.LastAccessTime));
 {$ENDIF}
     SizeProperty := TFileSizeProperty.Create(pSearchRecord^.Size);
     AttributesProperty := TFileAttributesProperty.CreateOSAttributes(pSearchRecord^.Attr);
 
-    ModificationTimeProperty := TFileModificationDateTimeProperty.Create(pSearchRecord^.Time);
-    LastAccessTimeProperty := TFileLastAccessDateTimeProperty.Create(DCBasicTypes.TFileTime(pSearchRecord^.LastAccessTime));
-
     LinkProperty := TFileLinkProperty.Create;
 
+    AFilePath:= Path + pSearchRecord^.Name;
     if fpS_ISLNK(pSearchRecord^.Attr) then
     begin
-      AFilePath:= APath + pSearchRecord^.Name;
       LinkAttrs := mbFileGetAttrNoLinks(AFilePath);
       LinkProperty.LinkTo := ReadSymLink(AFilePath);
       LinkProperty.IsValid := LinkAttrs <> faInvalidAttributes;
@@ -356,13 +406,22 @@ begin
         if LinkProperty.IsLinkToDirectory then SizeProperty.Value := 0;
       end;
 {$ELSE}
-      if LinkProperty.IsValid then
+      if StrBegins(LinkProperty.LinkTo, 'Volume{') then
+      begin
+        LinkProperty.IsLinkToDirectory := True;
+        LinkProperty.IsValid:= mbDriveReady(AFilePath + PathDelim);
+      end
+      else if LinkProperty.IsValid then
         LinkProperty.IsLinkToDirectory := fpS_ISDIR(LinkAttrs)
-      else
+      else begin
         // On Windows links to directories are marked with Directory flag on the link.
         LinkProperty.IsLinkToDirectory := fpS_ISDIR(pSearchRecord^.Attr);
+      end;
 {$ENDIF}
     end;
+    {$IFDEF DARWIN}
+    FinderTagProperty := uMyDarwin.getMacOSFinderTagFileProperty(AFilePath);
+    {$ENDIF}
   end;
 
   // Set name after assigning Attributes property, because it is used to get extension.
@@ -375,7 +434,7 @@ var
   FindData: TWIN32FINDDATAW;
   FindHandle: THandle;
 {$ELSEIF DEFINED(UNIX)}
-  StatInfo: BaseUnix.Stat;
+  StatInfo: TDCStat;
 {$ELSE}
   SearchRecord: TSearchRecEx;
   FindResult: Longint;
@@ -396,7 +455,7 @@ begin
 
 {$ELSEIF DEFINED(UNIX)}
 
-  if fpLStat(UTF8ToSys(AFilePath), StatInfo) = -1 then
+  if DC_fpLstat(UTF8ToSys(AFilePath), StatInfo) = -1 then
     raise EFileNotFound.Create(aFilePath);
 
   Result := TFile.Create(ExtractFilePath(aFilePath));
@@ -454,7 +513,7 @@ begin
 end;
 
 procedure TFileSystemFileSource.RetrieveProperties(AFile: TFile;
-  PropertiesToSet: TFilePropertiesTypes; AVariantProperties: array of String);
+  PropertiesToSet: TFilePropertiesTypes; const AVariantProperties: array of String);
 var
   AIndex: Integer;
   sFullPath: String;
@@ -466,11 +525,11 @@ var
   StatXInfo: TStatX;
 {$ENDIF}
 {$IF DEFINED(UNIX)}
-  StatInfo, LinkInfo: BaseUnix.Stat; //buffer for stat info
+  StatInfo: TDCStat;
+  LinkInfo: BaseUnix.Stat; //buffer for stat info
 {$ELSEIF DEFINED(MSWINDOWS)}
   FindData: TWIN32FINDDATAW;
   FindHandle: THandle;
-  LinkAttrs: TFileAttrs;
 {$ELSE}
   SearchRec: TSearchRecEx;
 {$ENDIF}
@@ -533,14 +592,7 @@ begin
 
       if fpS_ISLNK(Attrs) then
       begin
-        LinkAttrs := mbFileGetAttrNoLinks(sFullPath);
-        LinkProperty.LinkTo := ReadSymLink(sFullPath);
-        LinkProperty.IsValid := LinkAttrs <> faInvalidAttributes;
-        if LinkProperty.IsValid then
-          LinkProperty.IsLinkToDirectory := fpS_ISDIR(LinkAttrs)
-        else
-          // On Windows links to directories are marked with Directory flag on the link.
-          LinkProperty.IsLinkToDirectory := fpS_ISDIR(Attrs);
+        FillLinkProperty(sFullPath, Attrs, LinkProperty);
       end;
     end;
 
@@ -580,7 +632,7 @@ begin
          fpOwner] * PropertiesToSet <> []) or
        ((uFileProperty.fpLink in PropertiesToSet) and (not (fpAttributes in AssignedProperties))) then
     begin
-      if fpLstat(UTF8ToSys(sFullPath), StatInfo) = -1 then
+      if DC_fpLStat(UTF8ToSys(sFullPath), StatInfo) = -1 then
         raise EFileNotFound.Create(sFullPath);
 
       if not (fpAttributes in AssignedProperties) then
@@ -598,13 +650,18 @@ begin
 
       if not (fpModificationTime in AssignedProperties) then
         ModificationTimeProperty := TFileModificationDateTimeProperty.Create(
-          FileTimeToDateTime(StatInfo.st_mtime));
+          FileTimeToDateTimeEx(StatInfo.mtime));
       if not (fpChangeTime in AssignedProperties) then
         Properties[fpChangeTime] := TFileChangeDateTimeProperty.Create(
-          FileTimeToDateTime(StatInfo.st_ctime));
+          FileTimeToDateTimeEx(StatInfo.ctime));
       if not (fpLastAccessTime in AssignedProperties) then
         LastAccessTimeProperty := TFileLastAccessDateTimeProperty.Create(
-          FileTimeToDateTime(StatInfo.st_atime));
+          FileTimeToDateTimeEx(StatInfo.atime));
+{$IF DEFINED(DARWIN)}
+      if not (fpCreationTime in AssignedProperties) then
+        CreationTimeProperty := TFileCreationDateTimeProperty.Create(
+          FileTimeToDateTimeEx(StatInfo.birthtime));
+{$ENDIF}
     end;
 
     if uFileProperty.fpLink in PropertiesToSet then
@@ -652,7 +709,7 @@ begin
                                       (StatXInfo.stx_mask and STATX_BTIME <> 0) and (StatXInfo.stx_btime.tv_sec > 0);
       if CreationTimeProperty.IsValid then
       begin
-        CreationTimeProperty.Value:= FileTimeToDateTime(DCBasicTypes.TFileTime(StatXInfo.stx_btime.tv_sec));
+        CreationTimeProperty.Value:= FileTimeToDateTimeEx(TFileTimeEx.Create(Int64(StatXInfo.stx_btime.tv_sec), Int64(StatXInfo.stx_btime.tv_nsec)));
       end;
     end;
     {$ENDIF}
@@ -689,6 +746,12 @@ begin
       CommentProperty := TFileCommentProperty.Create;
       CommentProperty.Value := FDescr.ReadDescription(sFullPath);
     end;
+
+{$IFDEF DARWIN}
+   if fpMacOSFinderTag in PropertiesToSet then begin
+     FinderTagProperty := uMyDarwin.getMacOSFinderTagFileProperty(sFullPath);
+   end;
+{$ENDIF}
 
     PropertiesToSet:= PropertiesToSet * fpVariantAll;
     for AProp in PropertiesToSet do
@@ -832,6 +895,9 @@ begin
              {$ENDIF}
              fpLastAccessTime,
              uFileProperty.fpLink
+             {$IF DEFINED(DARWIN)}
+             ,fpMacOSFinderTag
+             {$ENDIF}
             ];
 end;
 
@@ -852,6 +918,9 @@ begin
              fpComment
              {$IF DEFINED(MSWINDOWS)}
              , fpCompressedSize
+             {$ENDIF}
+             {$IF DEFINED(DARWIN)}
+             ,fpMacOSFinderTag
              {$ENDIF}
              ] + fpVariantAll;
 {$IF DEFINED(LINUX)}
@@ -993,6 +1062,60 @@ begin
                 theNewProperties);
 end;
 
+{ TFileSystemFileSourceProcessor }
+
+procedure TFileSystemFileSourceProcessor.consultCopyOperation( var params: TFileSourceConsultParams );
+var
+  sourceFS: IFileSource;
+  targetFS: IFileSource;
+
+  procedure doSource;
+  begin
+    // If same file source and address
+    if isCompatibleFileSourceForCopyOperation( sourceFS, targetFS ) then begin
+      params.resultFS:= sourceFS;
+    end else if fsoCopyIn in targetFS.GetOperationsTypes then begin
+      params.resultOperationType:= fsoCopyIn;
+      params.resultFS:= targetFS;
+    end else if (fsoCopyOut in sourceFS.GetOperationsTypes) and (fsoCopyIn in targetFS.GetOperationsTypes) then begin
+      params.resultOperationType:= fsoCopyOut;
+      params.resultFS:= params.sourceFS;
+      params.operationTemp:= True;
+    end else begin
+      params.consultResult:= fscrNotSupported;
+    end;
+  end;
+
+  procedure doTarget;
+  begin
+    if fsoCopyOut in sourceFS.GetOperationsTypes then begin
+      params.consultResult:= fscrSuccess;
+      params.resultOperationType:= fsoCopyOut;
+      params.resultFS:= sourceFS;
+      params.operationTemp:= False;
+    end
+  end;
+
+begin
+  sourceFS:= params.sourceFS;
+  targetFS:= params.targetFS;
+
+  if params.currentFS = params.sourceFS then
+    doSource
+  else
+    doTarget;
+end;
+
+procedure TFileSystemFileSourceProcessor.consultOperation( var params: TFileSourceConsultParams );
+begin
+  case params.operationType of
+    fsoCopy:
+      self.consultCopyOperation( params );
+    else
+      Inherited;
+  end;
+end;
+
 { TFileSystemFileSourceConnection }
 
 procedure TFileSystemFileSourceConnection.SetCurrentPath(NewPath: String);
@@ -1004,6 +1127,12 @@ begin
 
   inherited SetCurrentPath(NewPath);
 end;
+
+initialization
+  fileSystemFileSourceProcessor:= TFileSystemFileSourceProcessor.Create;
+
+finalization
+  FreeAndNil( fileSystemFileSourceProcessor );
 
 end.
 

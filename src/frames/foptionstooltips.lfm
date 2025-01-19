@@ -1,6 +1,7 @@
 inherited frmOptionsToolTips: TfrmOptionsToolTips
   Height = 480
   Width = 826
+  HelpKeyword = '/configuration.html#ConfigTooltips'
   AutoSize = True
   ClientHeight = 480
   ClientWidth = 826
@@ -116,7 +117,6 @@ inherited frmOptionsToolTips: TfrmOptionsToolTips
         Width = 54
         AutoSize = True
         BorderSpacing.Left = 3
-        Cancel = True
         Caption = 'Cop&y'
         OnClick = btnCopyToolTipsFileTypeClick
         TabOrder = 2

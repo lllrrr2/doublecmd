@@ -3,7 +3,7 @@
    -------------------------------------------------------------------------
    Interface to GVolumeMonitor
 
-   Copyright (C) 2014-2019 Alexander Koblov (alexx2000@mail.ru)
+   Copyright (C) 2014-2022 Alexander Koblov (alexx2000@mail.ru)
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
@@ -39,13 +39,14 @@ procedure Finalize;
 procedure AddObserver(Func: TGVolumeNotify);
 procedure RemoveObserver(Func: TGVolumeNotify);
 
+function Eject(const Path: String): Boolean;
 function Unmount(const Path: String): Boolean;
 function EnumerateVolumes(DrivesList: TDrivesList): Boolean;
 
 implementation
 
 uses
-  typinfo, fgl, uGLib2, uGio2, uGObject2, uShowMsg;
+  typinfo, fgl, LazLogger, uGLib2, uGio2, uGObject2, uShowMsg;
 
 type
   TGVolumeObserverList = specialize TFPGList<TGVolumeNotify>;
@@ -56,7 +57,7 @@ var
 
 procedure Print(const Message: String);
 begin
-  WriteLn('GVolumeMonitor: ', Message);
+  DebugLn('GVolumeMonitor: ', Message);
 end;
 
 function ReadString(Volume: PGVolume; const Kind: Pgchar): String;
@@ -106,6 +107,8 @@ begin
             Result^.DisplayName := StrPas(Name);
             g_free(Name);
           end;
+          Result^.Path:= StrPas(Path);
+          {
           Name:= g_uri_unescape_string(Path, nil);
           if (Name = nil) then
             Result^.Path:= StrPas(Path)
@@ -113,6 +116,7 @@ begin
             Result^.Path:= StrPas(Name);
             g_free(Name);
           end;
+          }
           g_free(Path);
         end;
       end;
@@ -150,6 +154,8 @@ begin
             Result^.DisplayName := StrPas(Name);
             g_free(Name);
           end;
+          Result^.Path:= StrPas(Path);
+          {
           Name:= g_uri_unescape_string(Path, nil);
           if (Name = nil) then
             Result^.Path:= StrPas(Path)
@@ -157,6 +163,7 @@ begin
             Result^.Path:= StrPas(Name);
             g_free(Name);
           end;
+          }
           g_free(Path);
         end;
       end;
@@ -238,6 +245,32 @@ begin
     g_object_unref(VolumeMonitor);
     VolumeMonitor:= nil;
   end;
+end;
+
+procedure FinishEject(source_object: PGObject; res: PGAsyncResult; user_data: gpointer); cdecl;
+var
+  AError: PGError = nil;
+begin
+   if not g_mount_eject_with_operation_finish(PGMount(source_object), res, @AError) then
+   begin
+     msgError(nil, AError^.message);
+     g_error_free(AError);
+   end;
+   g_object_unref(source_object);
+end;
+
+function Eject(const Path: String): Boolean;
+var
+  AFile: PGFile;
+  AMount: PGMount;
+begin
+  AFile:= g_file_new_for_path(Pgchar(Path));
+  AMount:= g_file_find_enclosing_mount(AFile, nil, nil);
+  Result:= Assigned(AMount);
+  if Result then begin
+    g_mount_eject_with_operation(AMount, G_MOUNT_UNMOUNT_NONE, nil, nil, @FinishEject, nil);
+  end;
+  g_object_unref(PGObject(AFile));
 end;
 
 procedure FinishUnmount(source_object: PGObject; res: PGAsyncResult; user_data: gpointer); cdecl;

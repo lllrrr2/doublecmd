@@ -42,19 +42,15 @@ function CopyFile(const sSrc, sDst: String; bAppend: Boolean = False): Boolean;
 }
 procedure DelTree(const sFolderName: String);
 {en
-   Read string from a text file into variable and goto next line
-   @param(hFile Handle of file)
-   @param(S Stores the result string)
-}
-function FileReadLn(hFile: THandle; out S: String): Boolean;
-{en
    Write string to a text file and append newline
    @param(hFile Handle of file)
    @param(S String for writing)
 }
-procedure FileWriteLn(hFile: Integer; S: String);
+procedure FileWriteLn(hFile: THandle; S: String);
 
 function GetNextCopyName(FileName: String; IsDirectory: Boolean): String;
+
+function mbFileIsText(const FileName: String): Boolean;
 
 function mbReadFileToString(const FileName: String): String;
 
@@ -63,7 +59,7 @@ implementation
 uses
   LCLProc, Dialogs, SysUtils, uLng, uGlobs, DCClassesUtf8, DCStrUtils,
   DCOSUtils, uFileSystemFileSource, uFile, uFileSystemDeleteOperation,
-  uFileSourceOperationOptions;
+  uFileSourceOperationOptions, uAdministrator;
 
 const
   cBlockSize=16384; // size of block if copyfile
@@ -150,66 +146,15 @@ begin
     DeleteOperation.Execute;
 
   finally
-    FreeThenNil(aFiles);
-    FreeThenNil(DeleteOperation);
+    FreeAndNil(aFiles);
+    FreeAndNil(DeleteOperation);
   end;
 end;
 
-function FileReadLn(hFile: THandle; out S: String): Boolean;
-const
-  cBufSize = 4096;
-var
-   Buf: array[1..cBufSize] of Char;
-   iNumRead,
-   iCounter,
-   iBufPos: Integer;
-   bEOLFound: Boolean;
-   iFilePos,
-   iFileSize: Int64;
-begin
-  S:='';
-  Result:= False;
-  // get current position
-  iFilePos:= FileSeek(hFile, 0, soFromCurrent);
-  // get file size
-  iFileSize:= FileSeek(hFile, 0, soFromEnd);
-  // restore position
-  FileSeek(hFile, iFilePos, soFromBeginning);
-  bEOLFound:= False;
-
-  while (iFilePos < iFileSize) and not bEOLFound do
-    begin
-      iNumRead:= FileRead(hFile, Buf, SizeOf(Buf));
-
-      for iCounter:= 1 to iNumRead do
-          begin
-            if Buf[iCounter] in [#13, #10] then
-              begin
-                bEOLFound:=True;
-                iBufPos:=iCounter+1;
-                if ((iBufPos) <= iNumRead) and (Buf[iBufPos] in [#13, #10]) then
-                  Inc(iBufPos);
-                Buf[iCounter]:= #0;
-                S:= StrPas(@Buf);
-                FileSeek(hFile, iFilePos+iBufPos-1, soFromBeginning);
-                Exit(True);
-              end;
-          end; // for
-
-      if (not bEOLFound) then
-         begin
-           if (iNumRead < cBufSize) then
-             Buf[iNumRead+1]:= #0;
-           S:= StrPas(@Buf);
-         end;
-      Inc(iFilePos, iNumRead);
-    end; // while
-end;
-
-procedure FileWriteLn(hFile: Integer; S: String);
+procedure FileWriteLn(hFile: THandle; S: String);
 begin
   S:= S + LineEnding;
-  FileWrite(hFile, PChar(S)[0], Length(S));
+  FileWrite(hFile, PAnsiChar(S)^, Length(S));
 end;
 
 function mbForceDirectory(DirectoryName: string): boolean;
@@ -284,21 +229,97 @@ begin
     until not mbFileSystemEntryExists(Result);
 end;
 
+function mbFileIsText(const FileName: String): Boolean;
+const
+  BUF_LEN = 4096;
+var
+  Len: Integer;
+  H, L: Integer;
+  Wide: Boolean;
+  Buffer: String;
+  Handle: THandle;
+  P, F: PAnsiChar;
+begin
+  Handle:= FileOpenUAC(FileName, fmOpenRead or fmShareDenyNone);
+  if (Handle = feInvalidHandle) then Exit(False);
+  try
+    Wide:= False;
+    SetLength(Buffer{%H-}, BUF_LEN);
+    Len:= FileRead(Handle, Buffer[1], BUF_LEN);
+    if Len > 0 then
+    begin
+      P:= PAnsiChar(Buffer);
+      F:= P + Len;
+
+      // UTF-8 BOM
+      if (P[0] = #$EF) and (P[1] = #$BB) and (P[2] = #$BF) then
+      begin
+        Inc(P, 3);
+      end
+      // UTF-16LE BOM
+      else if (P[0] = #$FF) and (P[1] = #$FE) then
+      begin
+        H:= 1;
+        L:= 0;
+        Inc(P, 2);
+        Wide:= True;
+      end
+      // UTF-16BE BOM
+      else if (P[0] = #$FE) and (P[1] = #$FF) then
+      begin
+        H:= 0;
+        L:= 1;
+        Inc(P, 2);
+        Wide:= True;
+      end;
+
+      if not Wide then
+      begin
+        while P < F do
+        begin
+          case P^ of
+            #0..#8, #11, #14..#25, #27..#31: Exit(False);
+          end;
+          Inc(P);
+        end;
+      end
+      else begin
+        while P < F do
+        begin
+          if P[H] = #0 then
+          begin
+            case P[L] of
+              #0..#8, #11, #14..#25, #27..#31: Exit(False);
+            end;
+          end;
+          Inc(P, 2);
+        end;
+      end;
+    end;
+  finally
+    FileClose(Handle);
+  end;
+  Result:= True;
+end;
+
 function mbReadFileToString(const FileName: String): String;
 var
-  Text: String;
   ASize: Int64;
   Handle: THandle;
 begin
   Result:= EmptyStr;
-  ASize:= mbFileSize(FileName);
-  SetLength(Text, ASize);
-  if Length(Text) = 0 then Exit;
   Handle:= mbFileOpen(FileName, fmOpenRead or fmShareDenyNone);
   if Handle <> feInvalidHandle then
   begin
-    if FileRead(Handle, Text[1], ASize) = ASize then
-      Result:= Text;
+    ASize:= FileGetSize(Handle);
+    SetLength(Result, ASize);
+    if Length(Result) > 0 then
+    begin
+      if FileRead(Handle, Result[1], ASize) <> ASize then
+      begin
+        SetLength(Result, 0);
+      end;
+    end;
     FileClose(Handle);
   end;
 end;

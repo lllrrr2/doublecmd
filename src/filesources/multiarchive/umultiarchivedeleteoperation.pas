@@ -66,7 +66,7 @@ end;
 
 destructor TMultiArchiveDeleteOperation.Destroy;
 begin
-  FreeThenNil(FFullFilesTreeToDelete);
+  FreeAndNil(FFullFilesTreeToDelete);
   inherited Destroy;
 end;
 
@@ -147,7 +147,7 @@ end;
 
 procedure TMultiArchiveDeleteOperation.Finalize;
 begin
-  FreeThenNil(FExProcess);
+  FreeAndNil(FExProcess);
   with FMultiArchiveFileSource.MultiArcItem do
   if not FDebug then
     mbDeleteFile(FTempFile);
@@ -199,7 +199,7 @@ begin
     begin
       ShowError(Format(rsMsgLogError + rsMsgLogDelete,
                  [FileName +
-                  ' - Exit status: ' + IntToStr(ExitStatus)]), [log_arc_op]);
+                  ' - ' + rsMsgExitStatusCode + ' ' + IntToStr(ExitStatus)]), [log_arc_op]);
     end
   else
     begin

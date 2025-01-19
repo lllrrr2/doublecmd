@@ -3,7 +3,7 @@
    -------------------------------------------------------------------------
    Archive File support - class for manage WCX plugins (Version 2.20)
 
-   Copyright (C) 2006-2018 Alexander Koblov (alexx2000@mail.ru)
+   Copyright (C) 2006-2024 Alexander Koblov (alexx2000@mail.ru)
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@ unit uWCXmodule;
 interface
 
 uses
-  LCLType, Classes, Dialogs, LazUTF8Classes, dynlibs, SysUtils,
+  LCLType, Classes, Dialogs, DCClassesUtf8, dynlibs, SysUtils, uExtension,
   uWCXprototypes, WcxPlugin, Extension, DCBasicTypes, DCXmlConfig, uClassesEx;
 
 Type
@@ -47,15 +47,18 @@ Type
   { Handles THeaderData and THeaderDataEx }
   TWCXHeader = class(TObjectEx)
   private
+    FileTime: LongInt;
+    FDateTime: TDateTime;
+    FNanoTime: TWinFileTime;
+  private
+    function GetDateTime: TDateTime;
     function PCharLToUTF8(CharString: PChar; MaxSize: Integer): String;
-
   public
     ArcName: String;
     FileName: String;
     Flags,
     HostOS,
     FileCRC,
-    FileTime,
     UnpVer,
     Method: Longint;
     FileAttr: TFileAttrs;
@@ -70,15 +73,16 @@ Type
     constructor Create(const Data: PHeaderDataEx); overload;
     constructor Create(const Data: PHeaderDataExW); overload;
     constructor Create; overload; // allows creating empty record
+
+    property DateTime: TDateTime read GetDateTime write FDateTime;
   end;
 
   
   { TWcxModule }
 
-  TWcxModule = class
+  TWcxModule = class(TDcxModule)
   private
     FModuleName: String;
-    FModuleHandle: TLibHandle;  // Handle to .DLL or .so
     FBackgroundFlags: Integer;
 
   public
@@ -154,7 +158,7 @@ Type
 
   TWCXModuleList = class(TStringList)
   private
-    FModuleList: TStringListUTF8;
+    FModuleList: TStringListEx;
   private
     function GetAEnabled(Index: Integer): Boolean;
     function GetAExt(Index: Integer): String;
@@ -254,6 +258,7 @@ begin
     //------------------------------------------------------
     UnloadModule;
   end;
+  inherited Destroy;
 end;
 
 function TWcxModule.OpenArchiveHandle(FileName: String; anOpenMode: Longint; out OpenResult: Longint): TArcHandle;
@@ -396,11 +401,12 @@ end;
 
 function TWcxModule.LoadModule(const sName:String):Boolean;
 var
-  PackDefaultParamStruct : TPackDefaultParamStruct;
   StartupInfo: TExtensionStartupInfo;
+  PackDefaultParamStruct : TPackDefaultParamStruct;
 begin
   FModuleName := ExtractFileName(sName);
-  FModuleHandle := mbLoadLibrary(mbExpandFileName(sName));
+  FModulePath := mbExpandFileName(sName);
+  FModuleHandle := mbLoadLibrary(FModulePath);
   if FModuleHandle = 0 then Exit(False);
 
   DCDebug('WCX module loaded ' + sName + ' at ' + hexStr(Pointer(FModuleHandle)));
@@ -479,24 +485,11 @@ begin
 
   // Extension API
   if Assigned(ExtensionInitialize) then
-    begin
-      FillByte(StartupInfo, SizeOf(TExtensionStartupInfo), 0);
+  begin
+    InitializeExtension(@StartupInfo);
 
-      with StartupInfo do
-      begin
-        StructSize:= SizeOf(TExtensionStartupInfo);
-        PluginDir:= ExtractFilePath(mbExpandFileName(sName));
-        PluginConfDir:= gpCfgDir;
-        InputBox:= @fDialogBox.InputBox;
-        MessageBox:= @fDialogBox.MessageBox;
-        DialogBoxLFM:= @fDialogBox.DialogBoxLFM;
-        DialogBoxLRS:= @fDialogBox.DialogBoxLRS;
-        DialogBoxLFMFile:= @fDialogBox.DialogBoxLFMFile;
-        SendDlgMsg:= @fDialogBox.SendDlgMsg;
-      end;
-
-      ExtensionInitialize(@StartupInfo);
-    end;
+    ExtensionInitialize(@StartupInfo);
+  end;
 end;
 
 procedure TWcxModule.UnloadModule;
@@ -684,7 +677,7 @@ end;
 
 constructor TWCXModuleList.Create;
 begin
-  FModuleList:= TStringListUTF8.Create;
+  FModuleList:= TStringListEx.Create;
   FModuleList.Sorted:= True;
 end;
 
@@ -879,10 +872,29 @@ begin
   if Assigned(Data^.CmtBuf) then
     Cmt := PCharLToUTF8(Data^.CmtBuf, Data^.CmtSize);
   CmtState := Data^.CmtState;
+  FNanoTime:= Data^.MfileTime;
 end;
 
 constructor TWCXHeader.Create;
 begin
+end;
+
+function TWCXHeader.GetDateTime: TDateTime;
+begin
+  if FDateTime <> 0 then
+    Result:= FDateTime
+  else begin
+    if (FNanoTime > 0) then
+      FDateTime:= WinFileTimeToDateTime(FNanoTime)
+    else begin
+      if (FileTime = 0) then
+        FDateTime:= DATE_TIME_NULL
+      else begin
+        FDateTime:= WcxFileTimeToDateTime(FileTime);
+      end;
+    end;
+    Result:= FDateTime;
+  end;
 end;
 
 function TWCXHeader.PCharLToUTF8(CharString: PChar; MaxSize: Integer): String;
@@ -915,6 +927,8 @@ begin
   Result.UnpSize:= UnpSize;
   Result.Cmt:= Cmt;
   Result.CmtState:= CmtState;
+  Result.FNanoTime:= FNanoTime;
+  Result.FDateTime:= FDateTime;
 end;
 
 end.

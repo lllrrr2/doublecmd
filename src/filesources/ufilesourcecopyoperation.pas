@@ -45,10 +45,10 @@ type
     FSourceFileSource: IFileSource;
     FTargetFileSource: IFileSource;
     FSourceFiles: TFiles;
-    FTargetPath: String;
     FRenameMask: String;
 
   protected
+    FTargetPath: String;
     FCopyAttributesOptions: TCopyAttributesOptions;
     FSymLinkOption: TFileSourceOperationOptionSymLink;
     FFileExistsOption: TFileSourceOperationOptionFileExists;
@@ -237,15 +237,15 @@ begin
       begin
         RemainingTime :=
           EstimateRemainingTime(FStatisticsAtStartTime.DoneBytes,
-                                DoneBytes,
-                                TotalBytes,
+                                Abs(DoneBytes),
+                                Abs(TotalBytes),
                                 StartTime,
                                 SysUtils.Now,
                                 BytesPerSecond);
 
         // Update overall progress.
         if TotalBytes <> 0 then
-          UpdateProgress(DoneBytes / TotalBytes);
+          UpdateProgress(Abs(DoneBytes / TotalBytes));
       end;
     end;
 

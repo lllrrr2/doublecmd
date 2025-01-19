@@ -11,6 +11,7 @@ object frmMsg: TfrmMsg
   ClientHeight = 254
   ClientWidth = 426
   Constraints.MinWidth = 250
+  DefaultMonitor = dmMainForm
   KeyPreview = True
   OnClose = FormClose
   OnCreate = FormCreate
@@ -50,8 +51,6 @@ object frmMsg: TfrmMsg
     ChildSizing.EnlargeHorizontal = crsHomogenousSpaceResize
     ChildSizing.Layout = cclLeftToRightThenTopToBottom
     ChildSizing.ControlsPerLine = 3
-    Color = clForm
-    ParentColor = False
     TabOrder = 0
   end
   object mnuOther: TPopupMenu

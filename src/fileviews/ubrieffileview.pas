@@ -6,8 +6,9 @@ interface
 
 uses
   Classes, SysUtils, Controls, LMessages, Grids, Graphics,
-  uDisplayFile, DCXmlConfig, uTypes, uFileViewWithGrid, uFile,
-  uFileSource, uFileProperty;
+  uDisplayFile, DCXmlConfig, uTypes,
+  uFileView, uFileViewWithMainCtrl, uFileViewWithGrid,
+  uFile, uFileSource, uFileProperty;
 
 type
 
@@ -18,6 +19,7 @@ type
   TBriefDrawGrid = class(TFileViewGrid)
   protected
     FBriefView: TBriefFileView;
+    FOnDrawCell: TFileViewOnDrawCell;
   protected
     procedure UpdateView; override;
     procedure CalculateColRowCount; override;
@@ -34,11 +36,16 @@ type
     function  CellToIndex(ACol, ARow: Integer): Integer; override;
     procedure IndexToCell(Index: Integer; out ACol, ARow: Integer); override;
     procedure DrawCell(aCol, aRow: Integer; aRect: TRect; aState: TGridDrawState); override;
+
+    property OnDrawCell: TFileViewOnDrawCell read FOnDrawCell write FOnDrawCell;
   end;
 
   { TBriefFileView }
 
   TBriefFileView = class (TFileViewWithGrid)
+  protected
+    function GetOnDrawCell: TFileViewOnDrawCell;
+    procedure SetOnDrawCell( OnDrawCell: TFileViewOnDrawCell );
   protected
     procedure CreateDefault(AOwner: TWinControl); override;
     function GetFileViewGridClass: TFileViewGridClass; override;
@@ -47,10 +54,13 @@ type
     function GetVisibleFilesIndexes: TRange; override;
     function GetIconRect(FileIndex: PtrInt): TRect; override;
     procedure MouseScrollTimer(Sender: TObject); override;
+    procedure DoFileRenamed(ADisplayFile: TDisplayFile); override;
     procedure DoFileUpdated(AFile: TDisplayFile; UpdatedProperties: TFilePropertiesTypes = []); override;
   public
     function Clone(NewParent: TWinControl): TBriefFileView; override;
+    procedure CloneTo(FileView: TFileView); override;
     procedure SaveConfiguration(AConfig: TXmlConfig; ANode: TXmlNode; ASaveHistory:boolean); override;
+    property OnDrawCell: TFileViewOnDrawCell read GetOnDrawCell write SetOnDrawCell;
   end;
 
 implementation
@@ -378,7 +388,7 @@ begin
   if not FBriefView.IsLoadingFileList then
   begin
 
-    if (Shift=[ssCtrl])and(gFonts[dcfMain].Size > gFonts[dcfMain].MinValue) then
+    if (Shift=[ssCtrl])and(gFonts[dcfMain].Size < gFonts[dcfMain].MaxValue) then
     begin
       gFonts[dcfMain].Size:=gFonts[dcfMain].Size+1;
       frmMain.FrameLeft.UpdateView;
@@ -419,6 +429,7 @@ var
   iTextTop: Integer;
   AFile: TDisplayFile;
   FileSourceDirectAccess: Boolean;
+  onDrawCellFocused: Boolean;
 
   //------------------------------------------------------
   //begin subprocedures
@@ -440,7 +451,7 @@ var
         // center icon vertically
         Y:= aRect.Top + (RowHeights[ARow] - gIconsSize) div 2;
 
-        if gShowHiddenDimmed and AFile.FSFile.IsHidden then
+        if gShowHiddenDimmed and FBriefView.FileSource.IsHiddenFile(AFile.FSFile) then
           PixMapManager.DrawBitmapAlpha(IconID,
                                         Canvas,
                                         aRect.Left + CELL_PADDING,
@@ -506,11 +517,16 @@ begin
       iTextTop := aRect.Top + (RowHeights[aRow] - Canvas.TextHeight('Wg')) div 2;
 
       DrawIconCell;
+
+      if Assigned(OnDrawCell) and not(CsDesigning in ComponentState) then begin
+        onDrawCellFocused:= (gdSelected in aState) and FFileView.Active;
+        OnDrawCell(FBriefView,aCol,aRow,aRect,onDrawCellFocused,AFile);
+      end;
     end
   else
     begin
       // Draw background.
-      Canvas.Brush.Color := FBriefView.DimColor(gBackColor);
+      Canvas.Brush.Color := FBriefView.DimColor(gColors.FilePanel^.BackColor);
       Canvas.FillRect(aRect);
     end;
 
@@ -519,6 +535,16 @@ begin
 end;
 
 { TBriefFileView }
+
+function TBriefFileView.GetOnDrawCell: TFileViewOnDrawCell;
+begin
+  Result:= TBriefDrawGrid(dgPanel).OnDrawCell;
+end;
+
+procedure TBriefFileView.SetOnDrawCell(OnDrawCell: TFileViewOnDrawCell);
+begin
+  TBriefDrawGrid(dgPanel).OnDrawCell:= OnDrawCell;
+end;
 
 procedure TBriefFileView.CreateDefault(AOwner: TWinControl);
 begin
@@ -612,6 +638,11 @@ begin
   end;
 end;
 
+procedure TBriefFileView.DoFileRenamed(ADisplayFile: TDisplayFile);
+begin
+  ADisplayFile.Tag:= -1;
+end;
+
 procedure TBriefFileView.DoFileUpdated(AFile: TDisplayFile;
   UpdatedProperties: TFilePropertiesTypes);
 begin
@@ -622,6 +653,13 @@ end;
 function TBriefFileView.Clone(NewParent: TWinControl): TBriefFileView;
 begin
   Result := TBriefFileView.Create(NewParent, Self);
+end;
+
+procedure TBriefFileView.CloneTo(FileView: TFileView);
+begin
+  inherited CloneTo(FileView);
+  if FileView is TBriefFileView then
+    TBriefFileView(FileView).OnDrawCell:= self.OnDrawCell;
 end;
 
 procedure TBriefFileView.SaveConfiguration(AConfig: TXmlConfig; ANode: TXmlNode; ASaveHistory:boolean);

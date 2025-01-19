@@ -7,15 +7,16 @@ uses
   fpmkunit, SysUtils, Classes;
 
 const
-  AllMyUnixOSes = AllUnixOSes - [Darwin];
+  AllMyUnixOSes = AllUnixOSes - [Darwin, Haiku];
 
 const
-  CommonComponents: array[1..9] of String =
+  CommonComponents: array[1..10] of String =
   (
     'components\chsdet\chsdet.lpk',
     'components\multithreadprocs\multithreadprocslaz.lpk',
-    'components\dcpcrypt\dcpcrypt.lpk',
+    'components\kascrypt\kascrypt.lpk',
     'components\doublecmd\doublecmd_common.lpk',
+    'components\Image32\Image32.lpk',
     'components\KASToolBar\kascomp.lpk',
     'components\viewer\viewerpackage.lpk',
     'components\gifanim\pkg_gifanim.lpk',
@@ -44,9 +45,15 @@ const
     'plugins/dsx/DSXLocate/src/DSXLocate.lpi'
   );
 
-  DarwinPlugins: array[1..1] of String =
+  HaikuPlugins: array[1..1] of String =
   (
     'plugins/wcx/cpio/src/cpio.lpi'
+  );
+
+  DarwinPlugins: array[1..2] of String =
+  (
+    'plugins/wcx/cpio/src/cpio.lpi',
+    'plugins/wlx/MacPreview/src/MacPreview.lpi'
   );
 
   WindowsPlugins: array[1..4] of String =
@@ -212,6 +219,12 @@ begin
   begin
     for I:= Low(UnixPlugins) to High(UnixPlugins) do
       BuildEngine.ExecuteCommand(FLazBuild, SetDirSeparators(UnixPlugins[I]) + FLazBuildParams);
+  end;
+
+  if Defaults.OS = Haiku then
+  begin
+    for I:= Low(HaikuPlugins) to High(HaikuPlugins) do
+      BuildEngine.ExecuteCommand(FLazBuild, SetDirSeparators(HaikuPlugins[I]) + FLazBuildParams);
   end;
 
   if Defaults.OS = Darwin then

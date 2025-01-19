@@ -3,7 +3,7 @@
     -------------------------------------------------------------------------
     This is a thread-component sends an event when a change in the file system occurs.
 
-    Copyright (C) 2009-2021 Alexander Koblov (alexx2000@mail.ru)
+    Copyright (C) 2009-2023 Alexander Koblov (alexx2000@mail.ru)
     Copyright (C) 2011      Przemyslaw Nagay (cobines@gmail.com)
 
     This program is free software; you can redistribute it and/or modify
@@ -27,7 +27,11 @@ unit uFileSystemWatcher;
 interface
 
 uses
-  Classes, SysUtils, LCLVersion;
+  Classes, SysUtils, LCLVersion
+  {$IFDEF DARWIN}
+  , uDarwinFSWatch
+  {$ENDIF}
+  ;
 
 //{$DEFINE DEBUG_WATCHER}
 
@@ -42,12 +46,17 @@ type
                          fswUnknownChange);
   TFSWatcherEventTypes = set of TFSWatcherEventType;
 
+  TFSFeatures = set of (fsfFlatView);
+
   TFSWatcherEventData = record
     Path: String;
     EventType: TFSWatcherEventType;
     FileName: String;    // Valid for fswFileCreated, fswFileChanged, fswFileDeleted, fswFileRenamed
     NewFileName: String; // Valid for fswFileRenamed
     UserData: Pointer;
+{$IFDEF DARWIN}
+    OriginalEvent: TDarwinFSWatchEvent;
+{$ENDIF}
   end;
   PFSWatcherEventData = ^TFSWatcherEventData;
 
@@ -70,26 +79,57 @@ type
     class procedure RemoveWatch(aWatchPath: String;
                                 aWatcherEvent: TFSWatcherEvent);
     class procedure RemoveWatch(aWatcherEvent: TFSWatcherEvent);
+    {$IFDEF DARWIN}
+    class procedure UpdateWatch;
+    {$ENDIF}
     class function CanWatch(const WatchPaths: array of String): Boolean;
+    class function AvailableWatchFilter: TFSWatchFilter;
+    class function Features: TFSFeatures;
   end;
 
 implementation
 
 uses
-  LCLProc, LazUTF8, LazMethodList, uDebug, uExceptions, syncobjs, fgl
+  LCLProc, LazUTF8, LazMethodList, uDebug, uExceptions, syncobjs, fgl, Forms
   {$IF DEFINED(MSWINDOWS)}
   , Windows, JwaWinNT, JwaWinBase, DCWindows, DCStrUtils, uGlobs, DCOSUtils,
     DCConvertEncoding
   {$ELSEIF DEFINED(LINUX)}
   , inotify, BaseUnix, FileUtil, DCConvertEncoding, DCUnix
+  {$ELSEIF DEFINED(DARWIN)}
+  , uFileView, uGlobs
   {$ELSEIF DEFINED(BSD)}
   , BSD, Unix, BaseUnix, UnixType, FileUtil, DCOSUtils
+  {$ELSEIF DEFINED(HAIKU)}
+  , DCConvertEncoding
+    {$IF DEFINED(LCLQT5)}
+      , Qt5
+    {$ELSEIF DEFINED(LCLQT6)}
+      , Qt6
+    {$ENDIF}
   {$ENDIF};
+
+{$IF DEFINED(UNIX) AND not DEFINED(DARWIN)}
+  {$DEFINE UNIX_butnot_DARWIN}
+{$ENDIF}
+
+{$IF DEFINED(HAIKU) AND (DEFINED(LCLQT5) OR DEFINED(LCLQT6))}
+  {$DEFINE HAIKUQT}
+{$ENDIF}
 
 {$if lcl_fullversion < 2030000}
   {$macro on}
   {$define SameMethod:= CompareMethods}
 {$endif}
+
+{$IF DEFINED(UNIX_butnot_DARWIN)}
+type
+  {$IF DEFINED(HAIKUQT)}
+  TNotifyHandle = QFileSystemWatcherH;
+  {$ELSE}
+  TNotifyHandle = THandle;
+  {$ENDIF}
+{$ENDIF}
 
 {$IF DEFINED(MSWINDOWS)}
 const
@@ -136,7 +176,9 @@ type
 
   TOSWatch = class
   private
+    {$IF NOT DEFINED(DARWIN)}
     FHandle: THandle;
+    {$ENDIF}
     FObservers: TOSWatchObservers;
     FWatchFilter: TFSWatchFilter;
     FWatchPath: String;
@@ -147,11 +189,13 @@ type
     FReferenceCount: LongInt;
     FOldFileName: String; // for FILE_ACTION_RENAMED_OLD_NAME action
     {$ENDIF}
-    {$IF DEFINED(UNIX)}
-    FNotifyHandle: THandle;
+    {$IF DEFINED(UNIX_butnot_DARWIN)}
+    FNotifyHandle: TNotifyHandle;
     {$ENDIF}
+    {$IF NOT DEFINED(DARWIN)}
     procedure CreateHandle;
     procedure DestroyHandle;
+    {$ENDIF}
     {$IF DEFINED(MSWINDOWS)}
     procedure QueueCancelRead;
     procedure QueueRead;
@@ -159,14 +203,18 @@ type
     {$ENDIF}
   public
     constructor Create(const aWatchPath: String
-                       {$IFDEF UNIX}; aNotifyHandle: THandle{$ENDIF}); reintroduce;
+                       {$IFDEF UNIX_butnot_DARWIN}; aNotifyHandle: TNotifyHandle{$ENDIF}); reintroduce;
     destructor Destroy; override;
+    {$IF not DEFINED(DARWIN)}
     procedure UpdateFilter;
+    {$ENDIF}
     {$IF DEFINED(MSWINDOWS)}
     procedure Reference{$IFDEF DEBUG_WATCHER}(s: String){$ENDIF};
     procedure Dereference{$IFDEF DEBUG_WATCHER}(s: String){$ENDIF};
     {$ENDIF}
+    {$IF not DEFINED(DARWIN)}
     property Handle: THandle read FHandle;
+    {$ENDIF}
     property Observers: TOSWatchObservers read FObservers;
     property WatchPath: String read FWatchPath;
   end;
@@ -178,15 +226,26 @@ type
   private
     FWatcherLock: syncobjs.TCriticalSection;
     FOSWatchers: TOSWatchs;
-    {$IF DEFINED(UNIX)}
-    FNotifyHandle: THandle;
+    {$IF DEFINED(UNIX_butnot_DARWIN)}
+    FNotifyHandle: TNotifyHandle;
+    {$ENDIF}
+    {$IF DEFINED(DARWIN)}
+    FDarwinFSWatcher: TDarwinFSWatcher;
+    FWatcherSubdirs: TStringList;
     {$ENDIF}
     {$IF DEFINED(LINUX)}
     FEventPipe: TFilDes;
     {$ENDIF}
     FCurrentEventData: TFSWatcherEventData;
     FFinished: Boolean;
-
+    {$IF DEFINED(HAIKUQT)}
+    FFinishEvent: TSimpleEvent;
+    FHook: QFileSystemWatcher_hookH;
+    procedure DirectoryChanged(Path: PWideString); cdecl;
+    {$ENDIF}
+    {$IF DEFINED(DARWIN)}
+    procedure handleFSEvent(event:TDarwinFSWatchEvent);
+    {$ENDIF}
     procedure DoWatcherEvent;
     function GetWatchersCount: Integer;
     function GetWatchPath(var aWatchPath: String): Boolean;
@@ -206,6 +265,9 @@ type
   protected
     procedure Execute; override;
     procedure ExecuteWatcher;
+    {$IFDEF DARWIN}
+    function isWatchSubdir(const path: String): Boolean;
+    {$ENDIF}
   public
     constructor Create;
     destructor Destroy; override;
@@ -217,11 +279,21 @@ type
     procedure RemoveWatch(aWatchPath: String;
                           aWatcherEvent: TFSWatcherEvent);
     procedure RemoveWatch(aWatcherEvent: TFSWatcherEvent);
+    {$IFDEF DARWIN}
+    procedure UpdateWatch;
+    {$ENDIF}
     property WatchersCount: Integer read GetWatchersCount;
   end;
 
 var
   FileSystemWatcher: TFileSystemWatcherImpl = nil;
+
+procedure SyncDoWatcherEvent; inline;
+begin
+  // if Main Thread terminated, Synchronize() will never return
+  if not Application.Terminated then
+    FileSystemWatcher.Synchronize( @FileSystemWatcher.DoWatcherEvent );
+end;
 
 { TFileSystemWatcher }
 
@@ -242,11 +314,6 @@ begin
   begin
     DCDebug('Waiting for FileSystemWatcher thread');
     FileSystemWatcher.Terminate;
-  {$IF (fpc_version<2) or ((fpc_version=2) and (fpc_release<5))}
-    If (MainThreadID=GetCurrentThreadID) then
-      while not FileSystemWatcher.FFinished do
-        CheckSynchronize(100);
-  {$ENDIF}
     FileSystemWatcher.WaitFor;
     FreeAndNil(FileSystemWatcher);
   end;
@@ -285,6 +352,16 @@ begin
   end;
 end;
 
+{$IFDEF DARWIN}
+class procedure TFileSystemWatcher.UpdateWatch;
+begin
+  if Assigned(FileSystemWatcher) then
+  begin
+    FileSystemWatcher.UpdateWatch;
+  end;
+end;
+{$ENDIF}
+
 class function TFileSystemWatcher.CanWatch(const WatchPaths: array of String): Boolean;
 {$IF DEFINED(MSWINDOWS)}
 var
@@ -304,6 +381,24 @@ begin
   Result:= True;
 end;
 {$ENDIF}
+
+class function TFileSystemWatcher.AvailableWatchFilter: TFSWatchFilter;
+begin
+  Result := [wfFileNameChange
+{$IF NOT DEFINED(HAIKUQT)}
+           , wfAttributesChange
+{$ENDIF}
+  ];
+end;
+
+class function TFileSystemWatcher.Features: TFSFeatures;
+begin
+  Result := [
+{$IF DEFINED(DARWIN)}
+             fsfFlatView
+{$ENDIF}
+  ];
+end;
 
 // ----------------------------------------------------------------------------
 
@@ -369,7 +464,7 @@ begin
       FCurrentEventData.EventType := fswUnknownChange;
       FCurrentEventData.FileName := EmptyStr;
       FCurrentEventData.NewFileName := EmptyStr;
-      Synchronize(@DoWatcherEvent);
+      SyncDoWatcherEvent;
       Exit;
     end;
 
@@ -441,7 +536,7 @@ begin
 
       if (fnInfo^.Action <> FILE_ACTION_RENAMED_OLD_NAME) and
          ((gWatcherMode <> fswmWholeDrive) or IsPathObserved(Watch, FCurrentEventData.FileName)) then
-        Synchronize(@DoWatcherEvent);
+        SyncDoWatcherEvent;
 
       if fnInfo^.NextEntryOffset = 0 then
         Break
@@ -601,11 +696,11 @@ const
   // Event record size is variable, we use maximum possible for a single event.
   // Usually it is big enough so that multiple events can be read with single read().
   // The 'name' field is always padded up to multiple of 16 bytes with NULLs.
-  buffer_size = sizeof(inotify_event) + MAX_PATH;
+  buffer_size = (sizeof(inotify_event) + MAX_PATH) * 8;
 var
-  bytes_to_parse, p, i: Integer;
+  bytes_to_parse, p, k, i: Integer;
   buf: PChar = nil;
-  ev: pinotify_event;
+  ev, v: pinotify_event;
   fds: array[0..1] of tpollfd;
   ret: cint;
 begin
@@ -697,15 +792,39 @@ begin
                 begin
                   EventType := fswFileChanged;
                 end
-              else if (ev^.mask and (IN_CREATE or
-                                     IN_MOVED_TO)) <> 0 then
+              else if (ev^.mask and IN_CREATE) <> 0 then
                 begin
                   EventType := fswFileCreated;
                 end
-              else if (ev^.mask and (IN_DELETE or
-                                     IN_MOVED_FROM)) <> 0 then
+              else if (ev^.mask and IN_DELETE) <> 0 then
                 begin
                   EventType := fswFileDeleted;
+                end
+              else if (ev^.mask and IN_MOVED_FROM) <> 0 then
+                begin
+                  EventType := fswFileDeleted;
+                  // Try to find related event
+                  k := p + sizeof(inotify_event) + ev^.len;
+                  while (k < bytes_to_parse) do
+                  begin
+                    v := pinotify_event(buf + k);
+                    if (v^.mask and IN_MOVED_TO) <> 0 then
+                    begin
+                      // Same cookie and path
+                      if (v^.cookie = ev^.cookie) and (v^.wd = ev^.wd) then
+                      begin
+                        v^.mask := IN_IGNORED;
+                        EventType := fswFileRenamed;
+                        NewFileName := StrPas(PChar(@v^.name));
+                        Break;
+                      end;
+                    end;
+                    k := k + sizeof(inotify_event) + v^.len;
+                  end;
+                end
+              else if (ev^.mask and IN_MOVED_TO) <> 0 then
+                begin
+                  EventType := fswFileCreated
                 end
               else if (ev^.mask and (IN_DELETE_SELF or
                                      IN_MOVE_SELF)) <> 0 then
@@ -722,7 +841,7 @@ begin
             end;
 
             // call event handler
-            Synchronize(@DoWatcherEvent);
+            SyncDoWatcherEvent;
 
             Break;
           end; { if }
@@ -737,6 +856,10 @@ begin
     if Assigned(buf) then
       FreeMem(buf);
   end; { try - finally }
+end;
+{$ELSEIF DEFINED(DARWIN)}
+begin
+  FDarwinFSWatcher.start;
 end;
 {$ELSEIF DEFINED(BSD)}
 var
@@ -775,28 +898,115 @@ begin
           NewFileName := EmptyStr;
         end;
 
-        Synchronize(@DoWatcherEvent);
+        SyncDoWatcherEvent;
       end;
     end; { case }
   end; { while }
+end;
+{$ELSEIF DEFINED(HAIKUQT)}
+begin
+  while not Terminated do
+  begin
+    FFinishEvent.WaitFor(INFINITE);
+  end;
 end;
 {$ELSE}
 begin
 end;
 {$ENDIF}
 
+{$IF DEFINED(DARWIN)}
+function TFileSystemWatcherImpl.isWatchSubdir(const path: String): Boolean;
+begin
+  FWatcherLock.Acquire;
+  try
+    Result:= FWatcherSubdirs.IndexOf(path) >= 0;
+  finally
+    FWatcherLock.Release;
+  end;
+end;
+
+procedure TFileSystemWatcherImpl.handleFSEvent(event:TDarwinFSWatchEvent);
+begin
+  if [watch_file_name_change, watch_attributes_change] * gWatchDirs = [] then exit;
+  if event.isDropabled then exit;
+  if (ecChildChanged in event.categories) and (not isWatchSubdir(event.watchPath) ) then exit;
+
+  FCurrentEventData.Path := event.watchPath;
+  FCurrentEventData.FileName := EmptyStr;
+  FCurrentEventData.NewFileName := EmptyStr;
+  FCurrentEventData.OriginalEvent := event;
+  FCurrentEventData.EventType := fswUnknownChange;
+
+  if TDarwinFSWatchEventCategory.ecRootChanged in event.categories then begin
+    FCurrentEventData.EventType := fswSelfDeleted;
+  end else if event.fullPath.Length >= event.watchPath.Length+2 then begin
+    // 1. file-level update only valid if there is a FileName,
+    //    otherwise keep directory-level update
+    // 2. the order of the following judgment conditions must be preserved
+    if (not (watch_file_name_change in gWatchDirs)) and
+       ([ecStructChanged, ecAttribChanged] * event.categories = [ecStructChanged])
+         then exit;
+    if (not (watch_attributes_change in gWatchDirs)) and
+       ([ecStructChanged, ecAttribChanged] * event.categories = [ecAttribChanged])
+         then exit;
+
+    FCurrentEventData.FileName := ExtractFileName( event.fullPath );
+
+    if TDarwinFSWatchEventCategory.ecRemoved in event.categories then
+      FCurrentEventData.EventType := fswFileDeleted
+    else if TDarwinFSWatchEventCategory.ecRenamed in event.categories then begin
+      if ExtractFilePath(event.fullPath)=ExtractFilePath(event.renamedPath) then begin
+        // fswFileRenamed only when FileName and NewFileName in the same dir
+        // otherwise keep fswUnknownChange
+        FCurrentEventData.EventType := fswFileRenamed;
+        FCurrentEventData.NewFileName := ExtractFileName( event.renamedPath );
+      end;
+    end else if TDarwinFSWatchEventCategory.ecCreated in event.categories then
+      FCurrentEventData.EventType := fswFileCreated
+    else if TDarwinFSWatchEventCategory.ecAttribChanged in event.categories then
+      FCurrentEventData.EventType := fswFileChanged
+    else
+      exit;
+  end;
+
+  {$IFDEF DEBUG_WATCHER}
+  DCDebug('FSWatcher: Send event, Path %s', [FCurrentEventData.Path]);
+  {$ENDIF};
+  SyncDoWatcherEvent;
+
+  FCurrentEventData.OriginalEvent := nil;
+end;
+{$ENDIF}
+
+{$IF DEFINED(HAIKUQT)}
+procedure TFileSystemWatcherImpl.DirectoryChanged(Path: PWideString); cdecl;
+begin
+  FCurrentEventData.Path := CeUtf16ToUtf8(Path^);
+  FCurrentEventData.EventType := fswUnknownChange;
+  FCurrentEventData.FileName := EmptyStr;
+  FCurrentEventData.NewFileName := EmptyStr;
+  {$IFDEF DEBUG_WATCHER}
+  DCDebug('FSWatcher: Send event, Path %s', [FCurrentEventData.Path]);
+  {$ENDIF};
+  SyncDoWatcherEvent;
+end;
+{$ENDIF}
+
 procedure TFileSystemWatcherImpl.DoWatcherEvent;
 var
   i, j: Integer;
+  AWatchPath: String;
 begin
   if not Terminated then
   begin
+    AWatchPath := FCurrentEventData.Path;
     try
       FWatcherLock.Acquire;
       try
         for i := 0 to FOSWatchers.Count - 1 do
         begin
-          if FOSWatchers[i].WatchPath = FCurrentEventData.Path then
+          if FOSWatchers[i].WatchPath = AWatchPath then
           begin
             for j := 0 to FOSWatchers[i].Observers.Count - 1 do
             begin
@@ -820,6 +1030,26 @@ begin
                   {$IFDEF MSWINDOWS}
                   if gWatcherMode = fswmWholeDrive then
                     FCurrentEventData.Path := RegisteredWatchPath;
+                  {$ENDIF}
+                  {$IFDEF DARWIN}
+                  // FlatView Watch is supported on MacOS
+                  // FCurrentEventData.Path contains WatchPath
+                  // so in FlatView Mode, Path need to be adjusted to the Real Path
+                  if TFileView(UserData).FlatView then begin
+                    if ecDir in FCurrentEventData.OriginalEvent.categories then begin
+                      // in FlatView Mode, when receiving events about subdirectories,
+                      // WatchPath reload should be used instead of partial update
+                      FCurrentEventData.EventType:= fswUnknownChange;
+                      FCurrentEventData.Path := AWatchPath;
+                    end else begin
+                      FCurrentEventData.Path := ExcludeTrailingPathDelimiter(ExtractFilePath(FCurrentEventData.OriginalEvent.fullPath));
+                    end;
+                  end else begin
+                    if TDarwinFSWatchEventCategory.ecChildChanged in FCurrentEventData.OriginalEvent.categories then
+                      // not watching SubDir, then SubDir event should be discarded
+                      continue;
+                    FCurrentEventData.Path := AWatchPath;
+                  end;
                   {$ENDIF}
                   WatcherEvent(FCurrentEventData);
                 end;
@@ -892,17 +1122,14 @@ end;
 
 constructor TFileSystemWatcherImpl.Create;
 begin
-{$IF (fpc_version<2) or ((fpc_version=2) and (fpc_release<5))}
-  // Workaround for race condition, see FPC Mantis #16884.
-  inherited Create(True);
-{$ELSE}
-  inherited Create(False);
-{$ENDIF}
-
   FOSWatchers := TOSWatchs.Create({$IFDEF MSWINDOWS}False{$ELSE}True{$ENDIF});
   FWatcherLock := syncobjs.TCriticalSection.Create;
+  {$IFDEF DARWIN}
+  FWatcherSubdirs := TStringList.Create;
+  FWatcherSubdirs.Sorted := true;
+  FWatcherSubdirs.Duplicates := dupIgnore;
+  {$ENDIF}
 
-  FreeOnTerminate := False;
   FFinished := False;
 
   {$IF DEFINED(MSWINDOWS)}
@@ -938,17 +1165,24 @@ begin
   end
   else
     ShowError('pipe() failed');
+  {$ELSEIF DEFINED(DARWIN)}
+  FDarwinFSWatcher := TDarwinFSWatcher.create(@handleFSEvent);
   {$ELSEIF DEFINED(BSD)}
   FNotifyHandle := kqueue();
   if FNotifyHandle = feInvalidHandle then
     ShowError('kqueue() failed');
+  {$ELSEIF DEFINED(HAIKUQT)}
+  FFinishEvent:= TSimpleEvent.Create;
+  FNotifyHandle:= QFileSystemWatcher_Create();
+  FHook:= QFileSystemWatcher_hook_Create(FNotifyHandle);
+  QFileSystemWatcher_hook_hook_directoryChanged(FHook, @DirectoryChanged);
   {$ELSEIF DEFINED(UNIX)}
   FNotifyHandle := feInvalidHandle;
   {$ENDIF}
 
-{$IF (fpc_version<2) or ((fpc_version=2) and (fpc_release<5))}
-  Resume;
-{$ENDIF}
+  inherited Create(False);
+
+  FreeOnTerminate := False;
 end;
 
 destructor TFileSystemWatcherImpl.Destroy;
@@ -970,12 +1204,19 @@ begin
     FileClose(FNotifyHandle);
     FNotifyHandle := feInvalidHandle;
   end;
+  {$ELSEIF DEFINED(DARWIN)}
+  FreeAndNil(FDarwinFSWatcher);
   {$ELSEIF DEFINED(BSD)}
   if FNotifyHandle <> feInvalidHandle then
   begin
     FileClose(FNotifyHandle);
     FNotifyHandle := feInvalidHandle;
   end;
+  {$ELSEIF DEFINED(HAIKUQT)}
+  QFileSystemWatcher_hook_hook_directoryChanged(FHook, nil);
+  QFileSystemWatcher_hook_Destroy(FHook);
+  QFileSystemWatcher_Destroy(FNotifyHandle);
+  FreeAndNil(FFinishEvent);
   {$ENDIF}
 
   if Assigned(FOSWatchers) then
@@ -983,6 +1224,11 @@ begin
 
   if Assigned(FWatcherLock) then
     FreeAndNil(FWatcherLock);
+
+  {$IFDEF DARWIN}
+  if Assigned(FWatcherSubdirs) then
+    FreeAndNil(FWatcherSubdirs);
+  {$ENDIF}
 
   inherited Destroy;
 end;
@@ -1052,9 +1298,11 @@ begin
 
   if not Assigned(OSWatcher) then
   begin
-    OSWatcher := TOSWatch.Create(aWatchPath {$IFDEF UNIX}, FNotifyHandle {$ENDIF});
+    OSWatcher := TOSWatch.Create(aWatchPath {$IFDEF UNIX_butnot_DARWIN}, FNotifyHandle {$ENDIF});
     {$IF DEFINED(MSWINDOWS)}
     OSWatcher.Reference{$IFDEF DEBUG_WATCHER}('AddWatch'){$ENDIF}; // For usage by FileSystemWatcher (main thread)
+    {$ELSEIF DEFINED(DARWIN)}
+    FDarwinFSWatcher.addPath(aWatchPath);
     {$ENDIF}
     OSWatcherCreated := True;
   end;
@@ -1077,14 +1325,20 @@ begin
       WatcherIndex := FOSWatchers.Add(OSWatcher);
 
     OSWatcher.Observers.Add(Observer);
+    {$IF DEFINED(DARWIN)}
+    Result:= true;
+    {$ELSE}
     OSWatcher.UpdateFilter; // This creates or recreates handle.
-
     Result := OSWatcher.Handle <> feInvalidHandle;
+    {$ENDIF}
 
     // Remove watcher if could not create notification handle.
     if not Result then
       RemoveOSWatchLocked(WatcherIndex);
 
+    {$IFDEF DARWIN}
+    UpdateWatch;
+    {$ENDIF}
   finally
     FWatcherLock.Release;
   end;
@@ -1112,6 +1366,10 @@ begin
         Break;
       end;
     end;
+
+    {$IFDEF DARWIN}
+    UpdateWatch;
+    {$ENDIF}
   finally
     FWatcherLock.Release;
   end;
@@ -1127,10 +1385,43 @@ begin
     begin
       RemoveObserverLocked(i, aWatcherEvent);
     end;
+
+    {$IFDEF DARWIN}
+    UpdateWatch;
+    {$ENDIF}
   finally
     FWatcherLock.Release;
   end;
 end;
+
+{$IFDEF DARWIN}
+// udpate FWatcherSubdirs List, in order to facilitate the processing of
+// subsequent subdirectory events in isWatchSubdir()
+procedure TFileSystemWatcherImpl.UpdateWatch;
+var
+  i, j: Integer;
+  watch: TOSWatch;
+  observer: TOSWatchObserver;
+begin
+  FWatcherLock.Acquire;
+  try
+    FWatcherSubdirs.Clear;
+    for i := 0 to FOSWatchers.Count - 1 do
+    begin
+      watch := FOSWatchers[i];
+      for j := 0 to watch.Observers.Count - 1 do
+      begin
+        observer := watch.Observers[j];
+        if TFileView(observer.UserData).FlatView then
+          FWatcherSubdirs.Add(watch.WatchPath);
+      end;
+    end;
+    FDarwinFSWatcher.watchSubtree:= (FWatcherSubdirs.Count>0);
+  finally
+    FWatcherLock.Release;
+  end;
+end;
+{$ENDIF}
 
 procedure TFileSystemWatcherImpl.RemoveObserverLocked(OSWatcherIndex: Integer; aWatcherEvent: TFSWatcherEvent);
 var
@@ -1144,8 +1435,10 @@ begin
 
       if FOSWatchers[OSWatcherIndex].Observers.Count = 0 then
         RemoveOSWatchLocked(OSWatcherIndex)
+      {$IF NOT DEFINED(DARWIN)}
       else
-        FOSWatchers[OSWatcherIndex].UpdateFilter;
+        FOSWatchers[OSWatcherIndex].UpdateFilter
+      {$ENDIF};
 
       Break;
     end;
@@ -1160,6 +1453,9 @@ begin
     DestroyHandle;
     Dereference{$IFDEF DEBUG_WATCHER}('RemoveOSWatchLocked'){$ENDIF}; // Not using anymore by FileSystemWatcher from main thread
   end;
+  {$ENDIF}
+  {$IF DEFINED(DARWIN)}
+  FDarwinFSWatcher.removePath(FOSWatchers[Index].WatchPath);
   {$ENDIF}
   FOSWatchers.Delete(Index);
 end;
@@ -1199,6 +1495,10 @@ begin
     FileWrite(FEventPipe[1], buf, 1);
   end; { if }
 end;
+{$ELSEIF DEFINED(DARWIN)}
+begin
+  FDarwinFSWatcher.terminate;
+end;
 {$ELSEIF DEFINED(BSD)}
 var
   ke: TKEvent;
@@ -1214,6 +1514,10 @@ begin
     end; { if }
   end; { if }
 end;
+{$ELSEIF DEFINED(HAIKUQT)}
+begin
+  FFinishEvent.SetEvent;
+end;
 {$ELSE}
 begin
 end;
@@ -1224,24 +1528,28 @@ end;
 { TOSWatch }
 
 constructor TOSWatch.Create(const aWatchPath: String
-                            {$IFDEF UNIX}; aNotifyHandle: THandle{$ENDIF});
+                            {$IFDEF UNIX_butnot_DARWIN}; aNotifyHandle: TNotifyHandle{$ENDIF});
 begin
   FObservers := TOSWatchObservers.Create(True);
   FWatchFilter := [];
   FWatchPath := aWatchPath;
-  {$IFDEF UNIX}
+  {$IFDEF UNIX_butnot_DARWIN}
   FNotifyHandle := aNotifyHandle;
   {$ENDIF}
   {$IF DEFINED(MSWINDOWS)}
   FReferenceCount := 0;
   FBuffer := GetMem(VAR_READDIRECTORYCHANGESW_BUFFERSIZE);
   {$ENDIF}
+  {$IF not DEFINED(DARWIN)}
   FHandle := feInvalidHandle;
+  {$ENDIF}
 end;
 
 destructor TOSWatch.Destroy;
 begin
+  {$IF not DEFINED(DARWIN)}
   DestroyHandle;
+  {$ENDIF}
   inherited;
   {$IFDEF DEBUG_WATCHER}
   DCDebug(['FSWatcher: Destroying watch ', hexStr(Self)]);
@@ -1252,6 +1560,7 @@ begin
   {$ENDIF}
 end;
 
+{$IF not DEFINED(DARWIN)}
 procedure TOSWatch.UpdateFilter;
 var
   i: Integer;
@@ -1277,6 +1586,7 @@ begin
     {$ENDIF}
   end;
 end;
+{$ENDIF}
 
 {$IF DEFINED(MSWINDOWS)}
 procedure TOSWatch.Reference{$IFDEF DEBUG_WATCHER}(s: String){$ENDIF};
@@ -1311,6 +1621,7 @@ begin
 end;
 {$ENDIF}
 
+{$IF not DEFINED(DARWIN)}
 procedure TOSWatch.CreateHandle;
 {$IF DEFINED(MSWINDOWS)}
 begin
@@ -1389,6 +1700,17 @@ begin
     end; { if }
   end;
 end;
+{$ELSEIF DEFINED(HAIKUQT)}
+var
+  APath: WideString;
+begin
+  FHandle := 1;
+  APath := CeUtf8ToUtf16(FWatchPath);
+  {$IFDEF DEBUG_WATCHER}
+  DCDebug('FSWatcher: Add watch ', FWatchPath);
+  {$ENDIF}
+  QFileSystemWatcher_addPath(FNotifyHandle, @APath);
+end;
 {$ELSE}
 begin
   FHandle := feInvalidHandle;
@@ -1399,6 +1721,9 @@ procedure TOSWatch.DestroyHandle;
 {$IF DEFINED(MSWINDOWS)}
 var
   tmpHandle: THandle;
+{$ELSEIF DEFINED(HAIKUQT)}
+var
+  APath: WideString;
 {$ENDIF}
 begin
   if FHandle <> feInvalidHandle then
@@ -1420,11 +1745,19 @@ begin
     tmpHandle := FHandle;
     FHandle := feInvalidHandle;
     CloseHandle(tmpHandle);
+    {$ELSEIF DEFINED(HAIKUQT)}
+    FHandle := feInvalidHandle;
+    APath := CeUtf8ToUtf16(FWatchPath);
+    {$IFDEF DEBUG_WATCHER}
+    DCDebug('FSWatcher: Remove watch ', FWatchPath);
+    {$ENDIF}
+    QFileSystemWatcher_removePath(FNotifyHandle, @APath);
     {$ELSE}
     FHandle := feInvalidHandle;
     {$ENDIF}
   end;
 end;
+{$ENDIF}
 
 {$IF DEFINED(MSWINDOWS)}
 procedure TOSWatch.QueueCancelRead;

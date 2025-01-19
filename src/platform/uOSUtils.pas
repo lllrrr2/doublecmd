@@ -3,7 +3,7 @@
     -------------------------------------------------------------------------
     This unit contains platform depended functions.
 
-    Copyright (C) 2006-2022 Alexander Koblov (alexx2000@mail.ru)
+    Copyright (C) 2006-2023 Alexander Koblov (alexx2000@mail.ru)
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -56,22 +56,30 @@ const
   {$ELSEIF DEFINED(UNIX)}
   faFolder = S_IFDIR;
   ReversePathDelim = '\';
-  {$IFDEF DARWIN)}
-  RunTermCmd = '/Applications/Utilities/Terminal.app';  // default terminal
+  {$IF DEFINED(DARWIN)}
+  RunTermCmd: String = '/Applications/Utilities/Terminal.app';  // default terminal
   RunTermParams = '%D';
   RunInTermStayOpenCmd = '%COMMANDER_PATH%/scripts/terminal.sh'; // default run in terminal command AND Stay open after command
   RunInTermStayOpenParams = '''{command}''';
   RunInTermCloseCmd = ''; // default run in terminal command AND Close after command
   RunInTermCloseParams = '';
   MonoSpaceFont = 'Monaco';
+  {$ELSEIF DEFINED(HAIKU)}
+  RunTermCmd: String = 'Terminal';  // default terminal
+  RunTermParams: String = '-w %D';
+  RunInTermStayOpenCmd: String = ''; // default run in terminal command AND Stay open after command
+  RunInTermStayOpenParams: String = '';
+  RunInTermCloseCmd: String = ''; // default run in terminal command AND Close after command
+  RunInTermCloseParams: String = '';
+  MonoSpaceFont = 'Noto Sans Mono';
   {$ELSE}
   RunTermCmd: String = 'xterm';  // default terminal
   RunTermParams: String = '';
   RunInTermStayOpenCmd: String = 'xterm'; // default run in terminal command AND Stay open after command
   RunInTermStayOpenParams: String = '-e sh -c ''{command}; echo -n Press ENTER to exit... ; read a''';
   RunInTermCloseCmd: String = 'xterm'; // default run in terminal command AND Close after command
-  RunInTermCloseParams: String = '-e sh -c {command}';
-  MonoSpaceFont = 'Monospace';
+  RunInTermCloseParams: String = '-e sh -c ''{command}''';
+  MonoSpaceFont: String = 'Monospace';
   {$ENDIF}
   fmtCommandPath = '[%s]$:';
   {$ENDIF}
@@ -157,11 +165,8 @@ function mbFileNameToSysEnc(const LongPath: String): String;
    Converts file name to native representation
 }
 function mbFileNameToNative(const FileName: String): NativeString; inline;
-{en
-   Extract the root directory part of a file name.
-   @returns(Drive letter under Windows and mount point under Unix)
-}
-function ExtractRootDir(const FileName: String): String;
+
+function AccessDenied(LastError: Integer): Boolean; inline;
 
 procedure FixFormIcon(Handle: LCLType.HWND);
 procedure HideConsoleWindow;
@@ -184,17 +189,20 @@ implementation
 
 uses
   StrUtils, uFileProcs, FileUtil, uDCUtils, DCOSUtils, DCStrUtils, uGlobs, uLng,
-  fConfirmCommandLine, uLog, DCConvertEncoding, LazUTF8, uSysFolders
+  fConfirmCommandLine, uLog, DCConvertEncoding, LazUTF8
   {$IF DEFINED(MSWINDOWS)}
-  , Windows, uMyWindows, JwaWinNetWk,
-    uShlObjAdditional, DCWindows, uNetworkThread
+  , Windows, Shlwapi, WinRT.Classes, uMyWindows, JwaWinNetWk,
+    uShlObjAdditional, DCWindows, uNetworkThread, uClipboard
   {$ENDIF}
   {$IF DEFINED(UNIX)}
   , BaseUnix, Unix, uMyUnix, dl
     {$IF DEFINED(DARWIN)}
   , CocoaAll, uMyDarwin
-    {$ELSE}
+    {$ELSEIF NOT DEFINED(HAIKU)}
   , uGio, uClipboard, uXdg, uKde
+    {$ENDIF}
+    {$IF DEFINED(LINUX)}
+  , DCUnix, uMyLinux, uFlatpak
     {$ENDIF}
   {$ENDIF}
   ;
@@ -366,18 +374,53 @@ end;
 function ShellExecute(URL: String): Boolean;
 {$IF DEFINED(MSWINDOWS)}
 var
+  cchOut: DWORD;
   Return: HINST;
   wsFileName: UnicodeString;
   wsStartPath: UnicodeString;
+  AppID, FileExt: UnicodeString;
 begin
+  cchOut:= MAX_PATH;
+  SetLength(AppID, cchOut);
   URL:= NormalizePathDelimiters(URL);
-  wsFileName:= CeUtf8ToUtf16(QuoteDouble(URL));
+  FileExt:= CeUtf8ToUtf16(ExtractFileExt(URL));
+
+  if CheckWin32Version(10) then
+  begin
+    if (AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_APPID,
+                          PWideChar(FileExt), nil, PWideChar(AppID), @cchOut) = S_OK) then
+    begin
+      if cchOut > 0 then
+      begin
+        SetLength(AppID, cchOut - 1);
+        // Special case Microsoft Photos
+        if (AppID = 'Microsoft.Windows.Photos_8wekyb3d8bbwe!App') then
+        begin
+          if CheckPhotosVersion then
+          begin
+            URL:= URIEncode(URL);
+            URL:= 'ms-photos:viewer?fileName=' + StringReplace(URL, '%5C', '\', [rfReplaceAll]);
+          end
+          // Microsoft Photos does not work correct
+          // when process has administrator rights
+          else if (IsUserAdmin <> dupAccept) then
+          begin
+            TLauncherThread.LaunchFileAsync(URL);
+            Exit(True);
+          end;
+        end;
+      end;
+    end;
+  end;
+  wsFileName:= CeUtf8ToUtf16(URL);
   wsStartPath:= CeUtf8ToUtf16(mbGetCurrentDir());
+
   Return:= ShellExecuteW(0, nil, PWideChar(wsFileName), nil, PWideChar(wsStartPath), SW_SHOWNORMAL);
   if Return = SE_ERR_NOASSOC then
-    Result:= ExecCmdFork('rundll32 shell32.dll OpenAs_RunDLL ' + URL)
-  else
+    Result:= ExecCmdFork('rundll32 shell32.dll OpenAs_RunDLL ' + QuoteDouble(URL))
+  else begin
     Result:= Return > 32;
+  end;
 end;
 {$ELSEIF DEFINED(DARWIN)}
 var
@@ -405,33 +448,38 @@ var
   sCmdLine: String;
 begin
   Result:= False;
-  sCmdLine:= EmptyStr;
-  if FileIsUnixExecutable(URL) then
-    begin
-      if GetPathType(URL) <> ptAbsolute then
-        sCmdLine := './';
-      sCmdLine:= sCmdLine + QuoteStr(URL);
-    end
+
+  if GetPathType(URL) = ptAbsolute then
+    sCmdLine:= URL
+  else begin
+    sCmdLine:= IncludeTrailingPathDelimiter(mbGetCurrentDir);
+    sCmdLine:= GetAbsoluteFileName(sCmdLine, URL)
+  end;
+
+  if FileIsUnixExecutable(sCmdLine) then
+  begin
+    Result:= ExecuteCommand(sCmdLine, [], mbGetCurrentDir);
+  end
+  else begin
+  {$IF DEFINED(LINUX)}
+  if (DesktopEnv = DE_FLATPAK) then
+    Result:= FlatpakOpen(sCmdLine, False)
   else
+  {$ENDIF}
+  {$IF NOT DEFINED(HAIKU)}
+    if (DesktopEnv = DE_KDE) and (HasKdeOpen = True) then
+      Result:= KioOpen(sCmdLine) // Under KDE use "kioclient" to open files
+    else if HasGio and (DesktopEnv <> DE_XFCE) then
+      Result:= GioOpen(sCmdLine) // Under GNOME, Unity and LXDE use "GIO" to open files
+    else
+  {$ENDIF}
     begin
-      if (DesktopEnv = DE_KDE) and (HasKdeOpen = True) then
-        Result:= KioOpen(URL) // Under KDE use "kioclient" to open files
-      else if HasGio and (DesktopEnv <> DE_XFCE) then
-        Result:= GioOpen(URL) // Under GNOME, Unity and LXDE use "GIO" to open files
-      else
-        begin
-          if GetPathType(URL) = ptAbsolute then
-            sCmdLine:= URL
-          else
-            begin
-              sCmdLine := IncludeTrailingPathDelimiter(mbGetCurrentDir);
-              sCmdLine:= GetAbsoluteFileName(sCmdLine, URL)
-            end;
-          sCmdLine:= GetDefaultAppCmd(sCmdLine);
-        end;
+      sCmdLine:= GetDefaultAppCmd(sCmdLine);
+      if Length(sCmdLine) > 0 then begin
+        Result:= ExecCmdFork(sCmdLine);
+      end;
     end;
-  if Length(sCmdLine) <> 0 then
-    Result:= ExecCmdFork(sCmdLine);
+  end;
 end;
 {$ENDIF}
 
@@ -444,6 +492,13 @@ var
 begin
   Result:= (fpStatFS(PAnsiChar(CeUtf8ToSys(Path)), @sbfs) = 0);
   if not Result then Exit;
+{$IFDEF LINUX}
+  if (sbfs.fstype = RAMFS_MAGIC) then
+  begin
+    Exit(GetFreeMem(FreeSize, TotalSize));
+  end;
+{$ENDIF}
+  if (sbfs.blocks = 0) then Exit(False);
   FreeSize := (Int64(sbfs.bavail) * sbfs.bsize);
   TotalSize := (Int64(sbfs.blocks) * sbfs.bsize);
 end;
@@ -466,6 +521,7 @@ var
   sbfs: TStatFS;
 begin
   Result := High(Int64);
+{$IF NOT DEFINED(HAIKU)}
   if (fpStatFS(PAnsiChar(CeUtf8ToSys(Path)), @sbfs) = 0) then
   begin
     {$IFDEF BSD}
@@ -475,6 +531,7 @@ begin
     {$ENDIF}
       Result:= $FFFFFFFF; // 4 Gb
   end;
+{$ENDIF}
 end;
 {$ELSE}
 var
@@ -707,14 +764,14 @@ begin
 end;
 {$ENDIF}
 
-function ExtractRootDir(const FileName: String): String;
-{$IFDEF UNIX}
+function AccessDenied(LastError: Integer): Boolean;
+{$IF DEFINED(MSWINDOWS)}
 begin
-  Result:= ExcludeTrailingPathDelimiter(FindMountPointPath(ExcludeTrailingPathDelimiter(FileName)));
+  Result:= (LastError = ERROR_ACCESS_DENIED);
 end;
 {$ELSE}
 begin
-  Result:= ExtractFileDrive(FileName);
+  Result:= (LastError = ESysEPERM) or (LastError = ESysEACCES);
 end;
 {$ENDIF}
 

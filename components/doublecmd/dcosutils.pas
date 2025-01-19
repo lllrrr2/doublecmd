@@ -3,7 +3,7 @@
     -------------------------------------------------------------------------
     This unit contains platform dependent functions dealing with operating system.
 
-    Copyright (C) 2006-2021 Alexander Koblov (alexx2000@mail.ru)
+    Copyright (C) 2006-2024 Alexander Koblov (alexx2000@mail.ru)
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,6 +30,12 @@ uses
   SysUtils, Classes, DynLibs, DCClassesUtf8, DCBasicTypes, DCConvertEncoding
 {$IFDEF UNIX}
   , BaseUnix, DCUnix
+{$ENDIF}
+{$IFDEF LINUX}
+  , DCLinux
+{$ENDIF}
+{$IFDEF HAIKU}
+  , DCHaiku
 {$ENDIF}
 {$IFDEF MSWINDOWS}
   , JwaWinBase, Windows
@@ -109,6 +115,12 @@ function FPS_ISDIR(iAttr: TFileAttrs) : Boolean;
 }
 function FPS_ISLNK(iAttr: TFileAttrs) : Boolean;
 {en
+   Is file a regular file
+   @param(iAttr File attributes)
+   @returns(@true if file is a regular file, @false otherwise)
+}
+function FPS_ISREG(iAttr: TFileAttrs) : Boolean;
+{en
    Is file executable
    @param(sFileName File name)
    @returns(@true if file is executable, @false otherwise)
@@ -139,10 +151,19 @@ function FileIsReadOnly(iAttr: TFileAttrs): Boolean; inline;
           The directories in this path are not created if they don't exist.
           If it is empty then the system temporary directory is used.
           For example:
-            If PathPrefix is '/tmp/myfile' then files '/tmp/myfileXXXXXX' are tried.
+            If PathPrefix is '/tmp/myfile' then files '/tmp/myfile~XXXXXX.tmp' are tried.
             The path '/tmp' must already exist.)
 }
-function GetTempName(PathPrefix: String): String;
+function GetTempName(PathPrefix: String; Extension: String = 'tmp'): String;
+{en
+   Find file in the system PATH
+}
+function FindInSystemPath(var FileName: String): Boolean;
+{en
+   Extract file root directory
+   @param(FileName File name)
+}
+function ExtractRootDir(const FileName: String): String;
 
 (* File mapping/unmapping routines *)
 {en
@@ -169,16 +190,23 @@ function mbFileCreate(const FileName: String): System.THandle; overload; inline;
 function mbFileCreate(const FileName: String; Mode: LongWord): System.THandle; overload; inline;
 function mbFileCreate(const FileName: String; Mode, Rights: LongWord): System.THandle; overload;
 function mbFileAge(const FileName: String): DCBasicTypes.TFileTime;
+function mbFileGetTime(const FileName: String): DCBasicTypes.TFileTimeEx;
 // On success returns True.
+// nanoseconds supported
 function mbFileGetTime(const FileName: String;
-                       var ModificationTime: DCBasicTypes.TFileTime;
-                       var CreationTime    : DCBasicTypes.TFileTime;
-                       var LastAccessTime  : DCBasicTypes.TFileTime): Boolean;
+                       var ModificationTime: DCBasicTypes.TFileTimeEx;
+                       var CreationTime    : DCBasicTypes.TFileTimeEx;
+                       var LastAccessTime  : DCBasicTypes.TFileTimeEx): Boolean;
 // On success returns True.
 function mbFileSetTime(const FileName: String;
                        ModificationTime: DCBasicTypes.TFileTime;
                        CreationTime    : DCBasicTypes.TFileTime = 0;
                        LastAccessTime  : DCBasicTypes.TFileTime = 0): Boolean;
+// nanoseconds supported
+function mbFileSetTimeEx(const FileName: String;
+                         ModificationTime: DCBasicTypes.TFileTimeEx;
+                         CreationTime    : DCBasicTypes.TFileTimeEx;
+                         LastAccessTime  : DCBasicTypes.TFileTimeEx): Boolean;
 {en
    Checks if a given file exists - it can be a real file or a link to a file,
    but it can be opened and read from.
@@ -208,6 +236,7 @@ function mbFileSize(const FileName: String): Int64;
 function FileGetSize(Handle: System.THandle): Int64;
 function FileFlush(Handle: System.THandle): Boolean;
 function FileFlushData(Handle: System.THandle): Boolean;
+function FileIsReadOnlyEx(Handle: System.THandle): Boolean;
 function FileAllocate(Handle: System.THandle; Size: Int64): Boolean;
 { Directory handling functions}
 function mbGetCurrentDir: String;
@@ -237,6 +266,7 @@ function mbGetEnvironmentString(Index : Integer) : String;
 function mbExpandEnvironmentStrings(const FileName: String): String;
 function mbGetEnvironmentVariable(const sName: String): String;
 function mbSetEnvironmentVariable(const sName, sValue: String): Boolean;
+function mbUnsetEnvironmentVariable(const sName: String): Boolean;
 function mbSysErrorMessage: String; overload; inline;
 function mbSysErrorMessage(ErrorCode: Integer): String; overload;
 {en
@@ -244,6 +274,7 @@ function mbSysErrorMessage(ErrorCode: Integer): String; overload;
 }
 function mbGetModuleName(Address: Pointer = nil): String;
 function mbLoadLibrary(const Name: String): TLibHandle;
+function mbLoadLibraryEx(const Name: String): TLibHandle;
 function SafeGetProcAddress(Lib: TLibHandle; const ProcName: AnsiString): Pointer;
 {en
    Reads the concrete file's name that the link points to.
@@ -365,8 +396,6 @@ const
                 O_SYNC or O_DIRECT);
 {$ENDIF}
 
-(*Is Directory*)
-
 function  FPS_ISDIR(iAttr: TFileAttrs) : Boolean; inline;
 {$IFDEF MSWINDOWS}
 begin
@@ -374,11 +403,9 @@ begin
 end;
 {$ELSE}
 begin
-  Result := BaseUnix.FPS_ISDIR(iAttr);
+  Result := BaseUnix.FPS_ISDIR(TMode(iAttr));
 end;
 {$ENDIF}
-
-(*Is Link*)
 
 function FPS_ISLNK(iAttr: TFileAttrs) : Boolean; inline;
 {$IFDEF MSWINDOWS}
@@ -387,7 +414,18 @@ begin
 end;
 {$ELSE}
 begin
-  Result := BaseUnix.FPS_ISLNK(iAttr);
+  Result := BaseUnix.FPS_ISLNK(TMode(iAttr));
+end;
+{$ENDIF}
+
+function FPS_ISREG(iAttr: TFileAttrs) : Boolean; inline;
+{$IFDEF MSWINDOWS}
+begin
+  Result := (iAttr and FILE_ATTRIBUTE_DIRECTORY = 0);
+end;
+{$ELSE}
+begin
+  Result := BaseUnix.FPS_ISREG(TMode(iAttr));
 end;
 {$ENDIF}
 
@@ -537,11 +575,13 @@ end;
 {$ELSE}  // *nix
 var
   Option: TCopyAttributesOption;
-  StatInfo : BaseUnix.Stat;
-  utb : BaseUnix.TUTimBuf;
+  StatInfo : TDCStat;
+  modificationTime: TFileTimeEx;
+  creationTime: TFileTimeEx;
+  lastAccessTime: TFileTimeEx;
   mode : TMode;
 begin
-  if fpLStat(UTF8ToSys(sSrc), StatInfo) < 0 then
+  if DC_fpLStat(UTF8ToSys(sSrc), StatInfo) < 0 then
   begin
     Result := Options;
     if Assigned(Errors) then
@@ -563,14 +603,25 @@ begin
           if Assigned(Errors) then Errors^[caoCopyOwnership]:= GetLastOSError;
         end;
       end;
+{$IF DEFINED(HAIKU)}
+      if caoCopyXattributes in Options then
+      begin
+        if not mbFileCopyXattr(sSrc, sDst) then
+        begin
+          Include(Result, caoCopyXattributes);
+          if Assigned(Errors) then Errors^[caoCopyXattributes]:= GetLastOSError;
+        end;
+      end;
+{$ENDIF}
     end
     else
     begin
       if caoCopyTime in Options then
       begin
-        utb.actime  := time_t(StatInfo.st_atime);  // last access time
-        utb.modtime := time_t(StatInfo.st_mtime);  // last modification time
-        if fputime(UTF8ToSys(sDst), @utb) <> 0 then
+        modificationTime:= StatInfo.mtime;
+        lastAccessTime:= StatInfo.atime;
+        creationTime:= StatInfo.birthtime;
+        if DC_FileSetTime(sDst, modificationTime, creationTime, lastAccessTime) = false then
         begin
           Include(Result, caoCopyTime);
           if Assigned(Errors) then Errors^[caoCopyTime]:= GetLastOSError;
@@ -598,7 +649,7 @@ begin
         end;
       end;
 
-{$IFDEF LINUX}
+{$IF DEFINED(LINUX) or DEFINED(HAIKU)}
       if caoCopyXattributes in Options then
       begin
         if not mbFileCopyXattr(sSrc, sDst) then
@@ -613,7 +664,7 @@ begin
 end;
 {$ENDIF}
 
-function GetTempName(PathPrefix: String): String;
+function GetTempName(PathPrefix: String; Extension: String): String;
 const
   MaxTries = 100;
 var
@@ -623,17 +674,54 @@ begin
   if PathPrefix = '' then
     PathPrefix := GetTempDir
   else begin
-    FileName:= ExtractFileName(PathPrefix);
+    FileName:= ExtractOnlyFileName(PathPrefix);
+    PathPrefix:= ExtractFilePath(PathPrefix);
     // Generated file name should be less the maximum file name length
-    PathPrefix:= ExtractFilePath(PathPrefix) + UTF8Copy(FileName, 1, 48);
+    if (Length(FileName) > 0) then PathPrefix += UTF8Copy(FileName, 1, 48) + '~';
+  end;
+  if (Length(Extension) > 0) then
+  begin
+    if (not StrBegins(Extension, ExtensionSeparator)) then
+      Extension := ExtensionSeparator + Extension;
   end;
   repeat
-    Result := PathPrefix + IntToStr(System.Random(MaxInt)); // or use CreateGUID()
+    Result := PathPrefix + IntToStr(System.Random(MaxInt)) + Extension;
     Inc(TryNumber);
     if TryNumber = MaxTries then
       Exit('');
   until not mbFileSystemEntryExists(Result);
 end;
+
+function FindInSystemPath(var FileName: String): Boolean;
+var
+  I: Integer;
+  Path, FullName: String;
+  Value: TDynamicStringArray;
+begin
+  Path:= mbGetEnvironmentVariable('PATH');
+  Value:= SplitString(Path, PathSeparator);
+  for I:= Low(Value) to High(Value) do
+  begin
+    FullName:= IncludeTrailingPathDelimiter(Value[I]) + FileName;
+    if mbFileExists(FullName) then
+    begin
+      FileName:= FullName;
+      Exit(True);
+    end;
+  end;
+  Result:= False;
+end;
+
+function ExtractRootDir(const FileName: String): String;
+{$IFDEF UNIX}
+begin
+  Result:= ExcludeTrailingPathDelimiter(FindMountPointPath(ExcludeTrailingPathDelimiter(FileName)));
+end;
+{$ELSE}
+begin
+  Result:= ExtractFileDrive(FileName);
+end;
+{$ENDIF}
 
 function MapFile(const sFileName : String; out FileMapRec : TFileMapRec) : Boolean;
 {$IFDEF MSWINDOWS}
@@ -786,6 +874,16 @@ begin
   if Result <> feInvalidHandle then
   begin
     FileCloseOnExec(Result);
+{$IF DEFINED(DARWIN)}
+    if (Mode and (fmOpenSync or fmOpenDirect) <> 0) then
+    begin
+      if (FpFcntl(Result, F_NOCACHE, 1) = -1) then
+      begin
+        FileClose(Result);
+        Exit(feInvalidHandle);
+      end;
+    end;
+{$ENDIF}
     Result:= FileLock(Result, Mode and $FF);
   end;
 end;
@@ -817,6 +915,16 @@ begin
   if Result <> feInvalidHandle then
   begin
     FileCloseOnExec(Result);
+{$IF DEFINED(DARWIN)}
+    if (Mode and (fmOpenSync or fmOpenDirect) <> 0) then
+    begin
+      if (FpFcntl(Result, F_NOCACHE, 1) = -1) then
+      begin
+        FileClose(Result);
+        Exit(feInvalidHandle);
+      end;
+    end;
+{$ENDIF}
     Result:= FileLock(Result, Mode and $FF);
   end;
 end;
@@ -849,10 +957,18 @@ begin
 end;
 {$ENDIF}
 
+function mbFileGetTime(const FileName: String): DCBasicTypes.TFileTimeEx;
+var
+  CreationTime, LastAccessTime: DCBasicTypes.TFileTimeEx;
+begin
+  if not mbFileGetTime(FileName, Result, CreationTime, LastAccessTime) then
+    Result:= TFileTimeExNull;
+end;
+
 function mbFileGetTime(const FileName: String;
-                       var ModificationTime: DCBasicTypes.TFileTime;
-                       var CreationTime    : DCBasicTypes.TFileTime;
-                       var LastAccessTime  : DCBasicTypes.TFileTime): Boolean;
+                       var ModificationTime: DCBasicTypes.TFileTimeEx;
+                       var CreationTime    : DCBasicTypes.TFileTimeEx;
+                       var LastAccessTime  : DCBasicTypes.TFileTimeEx): Boolean;
 {$IFDEF MSWINDOWS}
 var
   Handle: System.THandle;
@@ -878,14 +994,18 @@ begin
 end;
 {$ELSE}
 var
-  StatInfo : BaseUnix.Stat;
+  StatInfo : TDCStat;
 begin
-  Result := fpLStat(UTF8ToSys(FileName), StatInfo) >= 0;
+  Result := DC_fpLStat(UTF8ToSys(FileName), StatInfo) >= 0;
   if Result then
   begin
-    LastAccessTime   := StatInfo.st_atime;
-    ModificationTime := StatInfo.st_mtime;
-    CreationTime     := StatInfo.st_ctime;
+    ModificationTime:= StatInfo.mtime;
+    LastAccessTime:= StatInfo.atime;
+    {$IF DEFINED(DARWIN)}
+    CreationTime:= StatInfo.birthtime;
+    {$ELSE}
+    CreationTime:= StatInfo.ctime;
+    {$ENDIF}
   end;
 end;
 {$ENDIF}
@@ -894,6 +1014,27 @@ function mbFileSetTime(const FileName: String;
                        ModificationTime: DCBasicTypes.TFileTime;
                        CreationTime    : DCBasicTypes.TFileTime = 0;
                        LastAccessTime  : DCBasicTypes.TFileTime = 0): Boolean;
+{$IFDEF MSWINDOWS}
+begin
+  Result:= mbFileSetTimeEx(FileName, ModificationTime, CreationTime, LastAccessTime);
+end;
+{$ELSE}
+var
+  NewModificationTime: DCBasicTypes.TFileTimeEx;
+  NewCreationTime    : DCBasicTypes.TFileTimeEx;
+  NewLastAccessTime  : DCBasicTypes.TFileTimeEx;
+begin
+  NewModificationTime:= specialize IfThen<TFileTimeEx>(ModificationTime<>0, TFileTimeEx.create(ModificationTime), TFileTimeExNull);
+  NewCreationTime:= specialize IfThen<TFileTimeEx>(CreationTime<>0, TFileTimeEx.create(CreationTime), TFileTimeExNull);
+  NewLastAccessTime:= specialize IfThen<TFileTimeEx>(LastAccessTime<>0, TFileTimeEx.create(LastAccessTime), TFileTimeExNull);
+  Result:= mbFileSetTimeEx(FileName, NewModificationTime, NewCreationTime, NewLastAccessTime);
+end;
+{$ENDIF}
+
+function mbFileSetTimeEx(const FileName: String;
+                         ModificationTime: DCBasicTypes.TFileTimeEx;
+                         CreationTime    : DCBasicTypes.TFileTimeEx;
+                         LastAccessTime  : DCBasicTypes.TFileTimeEx): Boolean;
 {$IFDEF MSWINDOWS}
 var
   Handle: System.THandle;
@@ -935,14 +1076,14 @@ begin
 end;
 {$ELSE}
 var
-  t: TUTimBuf;
-  CurrentModificationTime, CurrentCreationTime, CurrentLastAccessTime: DCBasicTypes.TFileTime;
+  CurrentModificationTime, CurrentCreationTime, CurrentLastAccessTime: DCBasicTypes.TFileTimeEx;
 begin
-  if mbFileGetTime(FileName,CurrentModificationTime, CurrentCreationTime, CurrentLastAccessTime) then
+  if mbFileGetTime(FileName, CurrentModificationTime, CurrentCreationTime, CurrentLastAccessTime) then
   begin
-    if LastAccessTime<>0 then t.actime := time_t(LastAccessTime) else t.actime := time_t(CurrentLastAccessTime);
-    if ModificationTime<>0 then t.modtime := time_t(ModificationTime) else t.modtime := time_t(CurrentModificationTime);
-    Result := (fputime(UTF8ToSys(FileName), @t) <> -1);
+    if ModificationTime<>TFileTimeExNull then CurrentModificationTime:= ModificationTime;
+    if CreationTime<>TFileTimeExNull then CurrentCreationTime:= CreationTime;
+    if LastAccessTime<>TFileTimeExNull then CurrentLastAccessTime:= LastAccessTime;
+    Result := DC_FileSetTime(FileName, CurrentModificationTime, CurrentCreationTime, CurrentLastAccessTime);
   end
   else
   begin
@@ -1179,8 +1320,10 @@ begin
       // (On Linux rename() returns success but doesn't do anything
       // if renaming a file to its hard link.)
       // We cannot use st_nlink for directories because it means "number of
-      // subdirectories"; hard links to directories are not supported on Linux
-      // or Windows anyway (on MacOSX they are). Therefore we always treat
+      // subdirectories" ("number of all entries" under macOS) in that directory,
+      // plus its special entries '.' and '..';
+      // hard links to directories are not supported on Linux
+      // or Windows anyway (on macOS they are). Therefore we always treat
       // directories as if they were a single link and rename them using temporary name.
 
       if (NewFileStat.st_nlink = 1) or BaseUnix.fpS_ISDIR(NewFileStat.st_mode) then
@@ -1194,14 +1337,7 @@ begin
             // We have renamed the old file but the new file name still exists,
             // so this wasn't a single file on a case-insensitive filesystem
             // accessible by two names that differ by case.
-
             FpRename(UTF8ToSys(tmpFileName), UTF8ToSys(OldName));  // Restore old file.
-{$IFDEF DARWIN}
-            // If it's a directory with multiple hard links then simply unlink the source.
-            if BaseUnix.fpS_ISDIR(NewFileStat.st_mode) and (NewFileStat.st_nlink > 1) then
-              Result := (fpUnLink(UTF8ToSys(OldName)) = 0)
-            else
-{$ENDIF}
             Result := False;
           end
           else if FpRename(UTF8ToSys(tmpFileName), UTF8ToSys(NewName)) = 0 then
@@ -1296,14 +1432,48 @@ begin
 end;
 {$ENDIF}
 
+function FileIsReadOnlyEx(Handle: System.THandle): Boolean;
+{$IF DEFINED(MSWINDOWS)}
+var
+  Info: BY_HANDLE_FILE_INFORMATION;
+begin
+  if GetFileInformationByHandle(Handle, Info) then
+    Result:= (Info.dwFileAttributes and (faReadOnly or faHidden or faSysFile) <> 0)
+  else
+    Result:= False;
+end;
+{$ELSEIF DEFINED(LINUX)}
+var
+  Flags: UInt32;
+begin
+  if FileGetFlags(Handle, Flags) then
+  begin
+    if (Flags and (FS_IMMUTABLE_FL or FS_APPEND_FL) <> 0) then
+      Exit(True);
+  end;
+  Result:= False;
+end;
+{$ELSE}
+begin
+  Result:= False;
+end;
+{$ENDIF}
+
 function FileAllocate(Handle: System.THandle; Size: Int64): Boolean;
 {$IF DEFINED(LINUX)}
 var
   Ret: cint;
   Sta: TStat;
+  StaFS: TStatFS;
 begin
   if (Size > 0) then
   begin
+    repeat
+      Ret:= fpfStatFS(Handle, @StaFS);
+    until (Ret <> -1) or (fpgeterrno <> ESysEINTR);
+    // FAT32 does not support a fast allocation
+    if (StaFS.fstype = MSDOS_SUPER_MAGIC) then
+      Exit(False);
     repeat
       Ret:= fpFStat(Handle, Sta);
     until (Ret <> -1) or (fpgeterrno <> ESysEINTR);
@@ -1313,7 +1483,7 @@ begin
       Sta.st_size:= (Size + Sta.st_blksize - 1) and not (Sta.st_blksize - 1);
       repeat
         Ret:= fpFAllocate(Handle, 0, 0, Sta.st_size);
-      until (Ret <> -1) or (fpgeterrno <> ESysEINTR) or (fpgeterrno <> ESysEAGAIN);
+      until (Ret <> -1) or (fpgeterrno <> ESysEINTR);
     end;
   end;
   Result:= FileTruncate(Handle, Size);
@@ -1433,11 +1603,11 @@ end;
 function mbCompareFileNames(const FileName1, FileName2: String): Boolean; inline;
 {$IF DEFINED(WINDOWS) OR DEFINED(DARWIN)}
 begin
-  Result:= (WideCompareText(CeUtf8ToUtf16(FileName1), CeUtf8ToUtf16(FileName2)) = 0);
+  Result:= (UnicodeCompareText(CeUtf8ToUtf16(FileName1), CeUtf8ToUtf16(FileName2)) = 0);
 end;
 {$ELSE}
 begin
-  Result:= (WideCompareStr(CeUtf8ToUtf16(FileName1), CeUtf8ToUtf16(FileName2)) = 0);
+  Result:= (UnicodeCompareStr(CeUtf8ToUtf16(FileName1), CeUtf8ToUtf16(FileName2)) = 0);
 end;
 {$ENDIF}
 
@@ -1576,7 +1746,7 @@ begin
     if EqualPos = 0 then Continue;
     EnvName:= Copy(EnvVar, 1, EqualPos - 1);
     EnvValue:= Copy(EnvVar, EqualPos + 1, MaxInt);
-    Result:= StringReplace(Result, '$' + EnvName, EnvValue, [rfReplaceAll, rfIgnoreCase]);
+    Result:= StringReplace(Result, '$' + EnvName, EnvValue, [rfReplaceAll]);
     Inc(Index);
   end;
 end;
@@ -1631,6 +1801,20 @@ begin
 end;
 {$ENDIF}
 
+function mbUnsetEnvironmentVariable(const sName: String): Boolean;
+{$IFDEF MSWINDOWS}
+var
+  wsName: UnicodeString;
+begin
+  wsName:= CeUtf8ToUtf16(sName);
+  Result:= SetEnvironmentVariableW(PWideChar(wsName), NIL);
+end;
+{$ELSE}
+begin
+  Result:= (unsetenv(PAnsiChar(CeUtf8ToSys(sName))) = 0);
+end;
+{$ENDIF}
+
 function mbSysErrorMessage: String;
 begin
   Result := mbSysErrorMessage(GetLastOSError);
@@ -1679,21 +1863,73 @@ end;
 function mbLoadLibrary(const Name: String): TLibHandle;
 {$IFDEF MSWINDOWS}
 var
+  dwMode: DWORD;
+  dwErrCode: DWORD;
   sRememberPath: String;
 begin
+  dwMode:= SetErrorMode(SEM_FAILCRITICALERRORS or SEM_NOOPENFILEERRORBOX);
   try
-    //Some plugins using DLL(s) in their directory are loaded correctly only if "CurrentDir" is poining their location.
-    //Also, TC switch "CurrentDir" to their directory when loading them. So let's do the same.
-    sRememberPath:=GetCurrentDir;
-    SetCurrentDir(ExcludeTrailingPathDelimiter(ExtractFilePath(Name)));
-    Result:= LoadLibraryW(PWideChar(CeUtf8ToUtf16(Name)));
+    // Some plugins using DLL(s) in their directory are loaded correctly only if "CurrentDir" is poining their location.
+    // Also, TC switch "CurrentDir" to their directory when loading them. So let's do the same.
+    sRememberPath:= GetCurrentDir;
+    SetCurrentDir(ExtractFileDir(Name));
+    Result:= SafeLoadLibrary(CeUtf8ToUtf16(Name));
+    dwErrCode:= GetLastError;
   finally
+    SetErrorMode(dwMode);
     SetCurrentDir(sRememberPath);
+    SetLastError(dwErrCode);
   end;
 end;
 {$ELSE}
 begin
-  Result:= TLibHandle(dlopen(PChar(UTF8ToSys(Name)), RTLD_LAZY));
+  Result:= SafeLoadLibrary(CeUtf8ToSys(Name));
+end;
+{$ENDIF}
+
+function mbLoadLibraryEx(const Name: String): TLibHandle;
+{$IF DEFINED(MSWINDOWS)}
+const
+  PATH_ENV = 'PATH';
+var
+  APath: String;
+  FullName: String;
+  usName: UnicodeString;
+begin
+  FullName:= Name;
+
+  if GetPathType(Name) = ptNone then
+  begin
+    FindInSystemPath(FullName);
+  end;
+  usName:= CeUtf8ToUtf16(FullName);
+
+  if CheckWin32Version(10)then
+  begin
+    Result:= LoadLibraryExW(PWideChar(usName), 0, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR or LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+  end
+  else if CheckWin32Version(6) then
+  begin
+    SetDllDirectoryW(PWideChar(ExtractFileDir(usName)));
+    try
+      Result:= LoadLibraryW(PWideChar(usName));
+    finally
+      SetDllDirectoryW(nil);
+    end;
+  end
+  else begin
+    APath:= mbGetEnvironmentVariable(PATH_ENV);
+    try
+      mbSetEnvironmentVariable(PATH_ENV, ExtractFileDir(Name));
+      Result:= LoadLibraryW(PWideChar(usName));
+    finally
+      mbSetEnvironmentVariable(PATH_ENV, APath);
+    end;
+  end;
+end;
+{$ELSE}
+begin
+  Result:= SafeLoadLibrary(CeUtf8ToSys(Name));
 end;
 {$ENDIF}
 

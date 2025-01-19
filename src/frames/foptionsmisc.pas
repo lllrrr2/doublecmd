@@ -92,7 +92,7 @@ implementation
 {$R *.lfm}
 
 uses
-  fOptions, Forms, Dialogs, fMain, Controls,
+  LConvEncoding, fOptions, Forms, Dialogs, fMain, Controls,
   DCStrUtils, uDCUtils, uSpecialDir, uShowForm, uGlobs, uLng, uThumbnails,
   uConvEncoding, uEarlyConfig;
 
@@ -127,8 +127,8 @@ begin
   end;
   cmbDefaultEncoding.Items.Insert(0, UpperCase(EncodingNone));
 
-  fneTCExecutableFilename.Filter := ParseLineToFileFilter([rsFilterExecutableFiles, '*.exe', rsFilterAnyFiles, '*.*']);
-  fneTCConfigFilename.Filter := ParseLineToFileFilter([rsFilterIniConfigFiles, '*.ini', rsFilterAnyFiles, '*.*']);
+  fneTCExecutableFilename.Filter := ParseLineToFileFilter([rsFilterExecutableFiles, '*.exe', rsFilterAnyFiles, AllFilesMask]);
+  fneTCConfigFilename.Filter := ParseLineToFileFilter([rsFilterIniConfigFiles, '*.ini', rsFilterAnyFiles, AllFilesMask]);
 end;
 
 procedure TfrmOptionsMisc.Load;
@@ -188,7 +188,7 @@ begin
   gThumbSize.cy        := speThumbHeight.Value;
   gGoToRoot            := chkGoToRoot.Checked;
   gShowCurDirTitleBar  := chkShowCurDirTitleBar.Checked;
-  gDefaultTextEncoding := cmbDefaultEncoding.Text;
+  gDefaultTextEncoding := NormalizeEncoding(cmbDefaultEncoding.Text);
 
   {$IFDEF MSWINDOWS}
   gTotalCommanderExecutableFilename := fneTCExecutableFilename.FileName;

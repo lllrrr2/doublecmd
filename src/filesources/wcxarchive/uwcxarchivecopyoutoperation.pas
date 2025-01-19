@@ -90,7 +90,6 @@ type
 
     class procedure ClearCurrentOperation;
 
-    function GetDescription(Details: TFileSourceOperationDescriptionDetails): String; override;
     class function GetOptionsUIClass: TFileSourceOperationOptionsUIClass; override;
 
     property ExtractWithoutPath: Boolean read FExtractWithoutPath write FExtractWithoutPath;
@@ -100,7 +99,7 @@ implementation
 
 uses
   Forms, LazUTF8, FileUtil, contnrs, DCOSUtils, DCStrUtils, uDCUtils,
-  fWcxArchiveCopyOperationOptions, uFileSystemUtil,
+  Math, DateUtils, fWcxArchiveCopyOperationOptions, uFileSystemUtil,
   uFileProcs, uLng, DCDateTimeUtils, DCBasicTypes, uShowMsg, DCConvertEncoding;
 
 // ----------------------------------------------------------------------------
@@ -137,9 +136,15 @@ begin
       // Get the number of bytes processed since the previous call
       if Size > 0 then
       begin
+        if CurrentFileDoneBytes < 0 then
+        begin
+          CurrentFileDoneBytes:= 0;
+        end;
         CurrentFileDoneBytes := CurrentFileDoneBytes + Size;
         if CurrentFileDoneBytes > CurrentFileTotalBytes then
+        begin
           CurrentFileDoneBytes := CurrentFileTotalBytes;
+        end;
         DoneBytes := DoneBytes + Size;
       end
       // Get progress percent value to directly set progress bar
@@ -148,14 +153,14 @@ begin
         // Total operation percent
         if (Size >= -100) and (Size <= -1) then
           begin
-            if (TotalBytes = 0) then TotalBytes:= 100;
-            DoneBytes := TotalBytes * Int64(-Size) div 100;
+            if (TotalBytes = 0) then TotalBytes:= -100;
+            DoneBytes := Abs(TotalBytes) * Int64(-Size) div 100;
           end
         // Current file percent
         else if (Size >= -1100) and (Size <= -1000) then
           begin
-            if (CurrentFileTotalBytes = 0) then CurrentFileTotalBytes:= 100;
-            CurrentFileDoneBytes := CurrentFileTotalBytes * (Int64(-Size) - 1000) div 100;
+            if (CurrentFileTotalBytes = 0) then CurrentFileTotalBytes:= -100;
+            CurrentFileDoneBytes := Abs(CurrentFileTotalBytes) * (Int64(-Size) - 1000) div 100;
           end;
       end;
 
@@ -209,6 +214,11 @@ begin
 end;
 
 procedure TWcxArchiveCopyOutOperation.Initialize;
+var
+  Index: Integer;
+  ACount: Integer;
+  AFileName: String;
+  ArcFileList: TList;
 begin
   // Is plugin allow multiple Operations?
   if FNeedsConnection then
@@ -219,6 +229,30 @@ begin
   // Extract without path from flat view
   if not FExtractWithoutPath then begin
     FExtractWithoutPath := SourceFiles.Flat;
+  end;
+
+  if efSmartExtract in ExtractFlags then
+  begin
+    ACount:= 0;
+    ArcFileList := FWcxArchiveFileSource.ArchiveFileList.Clone;
+    try
+      for Index := 0 to ArcFileList.Count - 1 do
+      begin
+        AFileName := PathDelim + TWcxHeader(ArcFileList[Index]).FileName;
+
+        if IsInPath(PathDelim, AFileName, False, False) then
+        begin
+          Inc(ACount);
+          if (ACount > 1) then
+          begin
+            FTargetPath := FTargetPath + ExtractOnlyFileName(FWcxArchiveFileSource.ArchiveFileName) + PathDelim;
+            Break;
+          end;
+        end;
+      end;
+    finally
+      ArcFileList.Free;
+    end;
   end;
 
   // Check rename mask
@@ -302,8 +336,12 @@ begin
         begin
           CurrentFileFrom := Header.FileName;
           CurrentFileTo := TargetFileName;
-          CurrentFileTotalBytes := Header.UnpSize;
-          CurrentFileDoneBytes := 0;
+          if (Header.UnpSize < 0) then
+            CurrentFileTotalBytes := 0
+          else begin
+            CurrentFileTotalBytes := Header.UnpSize;
+          end;
+          CurrentFileDoneBytes := -1;
 
           UpdateStatistics(FStatistics);
         end;
@@ -355,12 +393,15 @@ begin
       FreeAndNil(Header);
     end;
 
-    if (FExtractWithoutPath = False) then SetDirsAttributes(CreatedPaths);
-
   finally
     // Close archive, ignore function result, see:
     // https://www.ghisler.ch/board/viewtopic.php?p=299809#p299809
     iResult := WcxModule.CloseArchive(ArcHandle);
+    // Execute after CloseArchive
+    if (ExceptObject = nil) and (FExtractWithoutPath = False) then
+    begin
+      SetDirsAttributes(CreatedPaths);
+    end;
     // Free memory
     FreeAndNil(Files);
     FreeAndNil(MaskList);
@@ -371,16 +412,6 @@ end;
 procedure TWcxArchiveCopyOutOperation.Finalize;
 begin
   ClearCurrentOperation;
-end;
-
-function TWcxArchiveCopyOutOperation.GetDescription(Details: TFileSourceOperationDescriptionDetails): String;
-begin
-  case Details of
-    fsoddJobAndTarget:
-      Result := Format(rsOperExtractingFromTo, [FWcxArchiveFileSource.ArchiveFileName, TargetPath]);
-    else
-      Result := rsOperExtracting;
-  end;
 end;
 
 procedure TWcxArchiveCopyOutOperation.CreateDirsAndCountFiles(
@@ -442,7 +473,10 @@ begin
       begin
         if ((MaskList = nil) or MaskList.Matches(ExtractFileNameEx(Header.FileName))) then
         begin
-          Inc(FStatistics.TotalBytes, Header.UnpSize);
+          if (Header.UnpSize > 0) then
+          begin
+            Inc(FStatistics.TotalBytes, Header.UnpSize);
+          end;
           Inc(FStatistics.TotalFiles, 1);
 
           CurrentFileName := ExtractDirLevel(CurrentArchiveDir, ExtractFilePathEx(Header.FileName));
@@ -524,7 +558,7 @@ var
   PathIndex: Integer;
   TargetDir: String;
   Header: TWCXHeader;
-  Time: TFileTime;
+  Time: TFileTimeEx;
 begin
   Result := True;
 
@@ -541,10 +575,10 @@ begin
         // Restore attributes
         mbFileSetAttr(TargetDir, Header.FileAttr);
 
-        Time := WcxFileTimeToFileTime(Header.FileTime);
+        Time := DateTimeToFileTimeEx(Header.DateTime);
 
         // Set creation, modification time
-        mbFileSetTime(TargetDir, Time, Time, Time);
+        mbFileSetTimeEx(TargetDir, Time, Time, Time);
 
       except
         Result := False;
@@ -581,6 +615,14 @@ const
     = (fsourOverwrite, fsourSkip, fsourOverwriteLarger, fsourOverwriteAll,
        fsourSkipAll, fsourOverwriteSmaller, fsourOverwriteOlder, fsourCancel,
        fsourRenameSource, fsourAutoRenameSource);
+  ResponsesNoSize: array[0..8] of TFileSourceOperationUIResponse
+    = (fsourOverwrite,      fsourSkip,    fsourRenameSource,
+       fsourOverwriteAll,   fsourSkipAll, fsourAutoRenameSource,
+       fsourOverwriteOlder, fsourCancel,  fsouaCompare);
+  ResponsesNoSizeNoCompare: array[0..7] of TFileSourceOperationUIResponse
+    = (fsourOverwrite,      fsourSkip,    fsourRenameSource,
+       fsourOverwriteAll,   fsourSkipAll, fsourAutoRenameSource,
+       fsourOverwriteOlder, fsourCancel);
 var
   PossibleResponses: TFileSourceOperationUIResponses;
   Answer: Boolean;
@@ -588,7 +630,7 @@ var
 
   function OverwriteOlder: TFileSourceOperationOptionFileExists;
   begin
-    if WcxFileTimeToDateTime(Header.FileTime) > FileTimeToDateTime(mbFileAge(AbsoluteTargetFileName)) then
+    if CompareDateTime(Header.DateTime, FileTimeToDateTimeEx(mbFileGetTime(AbsoluteTargetFileName))) = GreaterThanValue then
       Result := fsoofeOverwrite
     else
       Result := fsoofeSkip;
@@ -620,11 +662,25 @@ begin
         // Can't asynchoronously extract file for comparison when multiple operations are not supported
         // TODO: implement synchronous CopyOut to temp directory or close the connection until the question is answered
         case FNeedsConnection of
-          True :  PossibleResponses := ResponsesNoCompare;
-          False:  PossibleResponses := Responses;
+          True :
+            begin
+              if (Header.UnpSize < 0) then
+                PossibleResponses := ResponsesNoSizeNoCompare
+              else begin
+                PossibleResponses := ResponsesNoCompare;
+              end;
+            end;
+          False:
+            begin
+              if (Header.UnpSize < 0) then
+                PossibleResponses := ResponsesNoSize
+              else begin
+                PossibleResponses := Responses;
+              end;
+            end;
         end;
         Message:= FileExistsMessage(AbsoluteTargetFileName, Header.FileName,
-                                    Header.UnpSize, WcxFileTimeToDateTime(Header.FileTime));
+                                    Header.UnpSize, Header.DateTime);
         FCurrentFilePath := Header.FileName;
         FCurrentTargetFilePath := AbsoluteTargetFileName;
         case AskQuestion(Message, '',

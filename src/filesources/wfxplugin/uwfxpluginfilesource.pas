@@ -97,7 +97,7 @@ type
     class function CreateFile(const APath: String): TFile; override;
     class function CreateFile(const APath: String; FindData: TWfxFindData): TFile; overload;
 
-    procedure RetrieveProperties(AFile: TFile; PropertiesToSet: TFilePropertiesTypes; AVariantProperties: array of String); override;
+    procedure RetrieveProperties(AFile: TFile; PropertiesToSet: TFilePropertiesTypes; const AVariantProperties: array of String); override;
 
     // Retrieve operations permitted on the source.  = capabilities?
     function GetOperationsTypes: TFileSourceOperationTypes; override;
@@ -193,7 +193,7 @@ var
 begin
   Result:= 0;
 
-  DCDebug('MainProgressProc ('+IntToStr(PluginNr)+','+SourceName+','+TargetName+','+IntToStr(PercentDone)+')=' ,IntTostr(Result));
+  // DCDebug('MainProgressProc ('+IntToStr(PluginNr)+','+SourceName+','+TargetName+','+IntToStr(PercentDone)+')=' ,IntTostr(Result));
 
   if Assigned(UpdateProgressFunction) then
     // Call operation progress function
@@ -303,7 +303,7 @@ Begin
   // write log info
   logWrite(sMsg + ', ' + logString, LogMsgType, bLogWindow, bLogFile);
 
-  //DCDebug('MainLogProc ('+ sMsg + ',' + logString + ')');
+  // DCDebug('MainLogProc ('+ sMsg + ',' + logString + ')');
 end;
 
 procedure MainLogProcA(PluginNr, MsgType: Integer; LogString: PAnsiChar); dcpcall;
@@ -317,73 +317,38 @@ begin
 end;
 
 function MainRequestProc(PluginNr, RequestType: Integer; CustomTitle, CustomText: String; var ReturnedText: String): Bool;
-var
-  sReq: String;
 begin
-  Result:= False;
-  // Use operation UI for this?
-  if CustomTitle = '' then
-    CustomTitle:= 'Double Commander';
+  if CustomTitle = '' then CustomTitle:= 'Double Commander';
 
   case RequestType of
     RT_Other:
-      begin
-        sReq:= 'RT_Other';
-        Result:= ShowInputQuery(CustomTitle, CustomText, ReturnedText);
-      end;
+      Result:= ShowInputQuery(CustomTitle, CustomText, ReturnedText);
     RT_UserName:
-      begin
-        sReq:= 'RT_UserName';
-        Result:= ShowInputQuery(CustomTitle, IfThen(CustomText = EmptyStr, rsMsgUserName, CustomText), ReturnedText);
-      end;
+      Result:= ShowInputQuery(CustomTitle, IfThen(CustomText = EmptyStr, rsMsgUserName, CustomText), ReturnedText);
     RT_Password:
-      begin
-        sReq:= 'RT_Password';
-        Result:= ShowInputQuery(CustomTitle, IfThen(CustomText = EmptyStr, rsMsgPassword, CustomText), True, ReturnedText);
-      end;
+      Result:= ShowInputQuery(CustomTitle, IfThen(CustomText = EmptyStr, rsMsgPassword, CustomText), True, ReturnedText);
     RT_Account:
-      begin
-        sReq:= 'RT_Account';
-        Result:= ShowInputQuery(CustomTitle, IfThen(CustomText = EmptyStr, rsMsgAccount, CustomText), ReturnedText);
-      end;
+      Result:= ShowInputQuery(CustomTitle, IfThen(CustomText = EmptyStr, rsMsgAccount, CustomText), ReturnedText);
     RT_UserNameFirewall:
-      begin
-        sReq:= 'RT_UserNameFirewall';
-        Result:= ShowInputQuery(CustomTitle, IfThen(CustomText = EmptyStr, rsMsgUserNameFirewall, CustomText), ReturnedText);
-      end;
+      Result:= ShowInputQuery(CustomTitle, IfThen(CustomText = EmptyStr, rsMsgUserNameFirewall, CustomText), ReturnedText);
     RT_PasswordFirewall:
-      begin
-        sReq:= 'RT_PasswordFirewall';
-        Result:= ShowInputQuery(CustomTitle, IfThen(CustomText = EmptyStr, rsMsgPasswordFirewall, CustomText), True, ReturnedText);
-      end;
+      Result:= ShowInputQuery(CustomTitle, IfThen(CustomText = EmptyStr, rsMsgPasswordFirewall, CustomText), True, ReturnedText);
     RT_TargetDir:
-      begin
-        sReq:= 'RT_TargetDir';
-        Result:= ShowInputQuery(CustomTitle, IfThen(CustomText = EmptyStr, rsMsgTargetDir, CustomText), ReturnedText);
-      end;
+      Result:= ShowInputQuery(CustomTitle, IfThen(CustomText = EmptyStr, rsMsgTargetDir, CustomText), ReturnedText);
     RT_URL:
-      begin
-        sReq:= 'RT_URL';
-        Result:= ShowInputQuery(CustomTitle, IfThen(CustomText = EmptyStr, rsMsgURL, CustomText), ReturnedText);
-      end;
+      Result:= ShowInputQuery(CustomTitle, IfThen(CustomText = EmptyStr, rsMsgURL, CustomText), ReturnedText);
     RT_MsgOK:
-      begin
-        sReq:= 'RT_MsgOK';
-        Result:= (ShowMessageBox(CustomText, CustomTitle, MB_OK) = IDOK);
-      end;
+      Result:= (ShowMessageBox(CustomText, CustomTitle, MB_OK) = IDOK);
     RT_MsgYesNo:
-      begin
-        sReq:= 'RT_MsgYesNo';
-        Result:= (ShowMessageBox(CustomText, CustomTitle, MB_YESNO) = IDYES);
-      end;
+      Result:= (ShowMessageBox(CustomText, CustomTitle, MB_YESNO) = IDYES);
     RT_MsgOKCancel:
-      begin
-        sReq:= 'RT_MsgOKCancel';
-        Result:= (ShowMessageBox(CustomText, CustomTitle, MB_OKCANCEL) = IDOK);
-      end;
+      Result:= (ShowMessageBox(CustomText, CustomTitle, MB_OKCANCEL) = IDOK);
+    else begin
+      Result:= False;
+    end;
   end;
 
-  DCDebug('MainRequestProc ('+IntToStr(PluginNr)+','+sReq+','+CustomTitle+','+CustomText+','+ReturnedText+')', BoolToStr(Result, True));
+  // DCDebug('MainRequestProc ('+IntToStr(PluginNr)+','+IntToStr(RequestType)+','+CustomTitle+','+CustomText+','+ReturnedText+')', BoolToStr(Result, True));
 end;
 
 function MainRequestProcA(PluginNr, RequestType: Integer; CustomTitle, CustomText, ReturnedText: PAnsiChar; MaxLen: Integer): Bool; dcpcall;
@@ -605,6 +570,7 @@ begin
       end;
 
     SizeProperty := TFileSizeProperty.Create(FindData.FileSize);
+    SizeProperty.IsValid := (FindData.FileSize >= 0);
     ModificationTimeProperty := TFileModificationDateTimeProperty.Create(FindData.LastWriteTime);
     ModificationTimeProperty.IsValid := (FindData.LastWriteTime <= SysUtils.MaxDateTime);
     LastAccessTimeProperty := TFileLastAccessDateTimeProperty.Create(FindData.LastAccessTime);
@@ -616,7 +582,7 @@ begin
 end;
 
 procedure TWfxPluginFileSource.RetrieveProperties(AFile: TFile;
-  PropertiesToSet: TFilePropertiesTypes; AVariantProperties: array of String);
+  PropertiesToSet: TFilePropertiesTypes; const AVariantProperties: array of String);
 var
   AIndex: Integer;
   AProp: TFilePropertyType;

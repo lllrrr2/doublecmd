@@ -48,12 +48,6 @@ uses
 implementation
 
 uses
-{$IFDEF MSWINDOWS}
-  Windows,
-{$ENDIF}
-{$IFDEF LibcAPI}
-  Libc,
-{$ENDIF}
   SysUtils,
   AbArcTyp,
   AbExcept,
@@ -62,7 +56,8 @@ uses
   AbVMStrm,
   AbDfBase,
   AbZlibPrc,
-  AbXzPrc,
+  AbZipxPrc,
+  DCcrc32,
   DCClassesUtf8;
 
 
@@ -127,19 +122,19 @@ end;
 { ========================================================================== }
 procedure DoStore(Archive : TAbZipArchive; Item : TAbZipItem; OutStream, InStream : TStream);
 var
-  CRC32       : LongInt;
+  CRC32       : UInt32;
   Percent     : LongInt;
   LastPercent : LongInt;
   InSize      : Int64;
   DataRead    : Int64;
   Total       : Int64;
   Abort       : Boolean;
-  Buffer      : array [0..8191] of byte;
+  Buffer      : array [0..16383] of byte;
 begin
   { setup }
   Item.CompressionMethod := cmStored;
   Abort := False;
-  CRC32 := -1;
+  CRC32 := 0;
   Total := 0;
   Percent := 0;
   LastPercent := 0;
@@ -159,7 +154,7 @@ begin
     end;
 
     { update CRC}
-    AbUpdateCRCBuffer(CRC32, Buffer, DataRead);
+    CRC32 := crc32_16bytes(Buffer, DataRead, CRC32);
 
     { write data (encrypting if needed) }
     OutStream.WriteBuffer(Buffer, DataRead);
@@ -169,7 +164,7 @@ begin
   end;
 
   { finish CRC calculation }
-  Item.CRC32 := not CRC32;
+  Item.CRC32 := LongInt(CRC32);
 
   { show final progress increment }
   if (Percent < 100) and Assigned(Archive.OnProgress) then
@@ -210,7 +205,13 @@ begin
     if InStream.Size > 0 then begin
 
       if SameText(ExtractFileExt(Sender.ArchiveName), '.zipx') then
-        DoCompressXz(ZipArchive, Item, DestStrm, InStream)
+      begin
+        case ZipArchive.CompressionMethod of
+          IntPtr(cmXz):   DoCompressXz(ZipArchive, Item, DestStrm, InStream);
+          IntPtr(cmZstd): DoCompressZstd(ZipArchive, Item, DestStrm, InStream);
+          else raise Exception.Create(EmptyStr);
+        end;
+      end
       else
       { determine how to store Item based on specified CompressionMethodToUse }
       case ZipArchive.CompressionMethodToUse of

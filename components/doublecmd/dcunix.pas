@@ -3,7 +3,7 @@
    -------------------------------------------------------------------------
    This unit contains Unix specific functions
 
-   Copyright (C) 2015-2022 Alexander Koblov (alexx2000@mail.ru)
+   Copyright (C) 2015-2024 Alexander Koblov (alexx2000@mail.ru)
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
@@ -18,26 +18,43 @@
    You should have received a copy of the GNU Lesser General Public
    License along with this library; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+
+   Notes:
+   1. TDarwinStat64 is the workaround for the bug of BaseUnix.Stat in FPC.
+      on MacOS with x86_64, Stat64 should be used instead of Stat.
+      and lstat64() should be called instead of lstat().
 }
 
 unit DCUnix;
 
 {$mode objfpc}{$H+}
+{$modeswitch advancedrecords}
 {$packrecords c}
 
 interface
 
 uses
-  InitC, BaseUnix, SysUtils;
+  InitC, BaseUnix, UnixType, DCBasicTypes, SysUtils;
 
 const
 {$IF DEFINED(LINUX)}
   FD_CLOEXEC = 1;
   O_CLOEXEC  = &02000000;
+  O_PATH     = &010000000;
+  _SC_NPROCESSORS_ONLN = 83;
 {$ELSEIF DEFINED(FREEBSD)}
   O_CLOEXEC  = &04000000;
+  _SC_NPROCESSORS_ONLN = 58;
+  CLOSE_RANGE_CLOEXEC = (1 << 2);
 {$ELSEIF DEFINED(NETBSD)}
   O_CLOEXEC  = $00400000;
+{$ELSEIF DEFINED(HAIKU)}
+  FD_CLOEXEC = 1;
+  O_CLOEXEC  = $00000040;
+{$ELSEIF DEFINED(DARWIN)}
+  F_NOCACHE  = 48;
+  O_CLOEXEC  = $1000000;
+  _SC_NPROCESSORS_ONLN = 58;
 {$ELSE}
   O_CLOEXEC  = 0;
 {$ENDIF}
@@ -90,9 +107,14 @@ type
     pw_change: time_t; //en< password change time
     pw_class: PChar;   //en< user access class
 {$ENDIF}
+{$IF NOT DEFINED(HAIKU)}
     pw_gecos: PChar;   //en< real name
+{$ENDIF}
     pw_dir: PChar;     //en< home directory
     pw_shell: PChar;   //en< shell program
+{$IF DEFINED(HAIKU)}
+    pw_gecos: PChar;   //en< real name
+{$ENDIF}
 {$IF DEFINED(BSD)}
     pw_expire: time_t; //en< account expiration
     pw_fields: cint;   //en< internal: fields filled in
@@ -110,6 +132,56 @@ type
   TGroupRecord = group;
   PGroupRecord = ^TGroupRecord;
 
+type
+{$IF DEFINED(DARWIN)}
+  TDarwinStat64 = record { the types are real}
+       st_dev        : dev_t;             // inode's device
+       st_mode       : mode_t;            // inode protection mode
+       st_nlink      : nlink_t;           // number of hard links
+       st_ino        : cuint64;           // inode's number
+       st_uid        : uid_t;             // user ID of the file's owner
+       st_gid        : gid_t;             // group ID of the file's group
+       st_rdev       : dev_t;             // device type
+       st_atime      : time_t;            // time of last access
+       st_atimensec  : clong;             // nsec of last access
+       st_mtime      : time_t;            // time of last data modification
+       st_mtimensec  : clong;             // nsec of last data modification
+       st_ctime      : time_t;            // time of last file status change
+       st_ctimensec  : clong;             // nsec of last file status change
+       st_birthtime  : time_t;            // File creation time
+       st_birthtimensec : clong;          // nsec of file creation time
+       st_size       : off_t;             // file size, in bytes
+       st_blocks     : cint64;            // blocks allocated for file
+       st_blksize    : cuint32;           // optimal blocksize for I/O
+       st_flags      : cuint32;           // user defined flags for file
+       st_gen        : cuint32;           // file generation number
+       st_lspare     : cint32;
+       st_qspare     : array[0..1] Of cint64;
+  end;
+
+  TDCStat = TDarwinStat64;
+{$ELSE}
+  TDCStat = BaseUnix.Stat;
+{$ENDIF}
+  PDCStat = ^TDCStat;
+
+  TDCStatHelper = record Helper for TDCStat
+  Public
+    function birthtime: TFileTimeEx; inline;
+    function mtime:     TFileTimeEx; inline;
+    function atime:     TFileTimeEx; inline;
+    function ctime:     TFileTimeEx; inline;
+  end;
+
+Function DC_fpLstat( const path:RawByteString; var Info:TDCStat ): cint; inline;
+
+// nanoseconds supported
+function DC_FileSetTime(const FileName: String;
+                        const mtime    : TFileTimeEx;
+                        const birthtime: TFileTimeEx;
+                        const atime    : TFileTimeEx ): Boolean;
+
+
 {en
    Set the close-on-exec flag to all
 }
@@ -118,6 +190,12 @@ procedure FileCloseOnExecAll;
    Set the close-on-exec (FD_CLOEXEC) flag
 }
 procedure FileCloseOnExec(Handle: System.THandle); inline;
+{en
+   Find mount point of file system where file is located
+   @param(FileName File name)
+   @returns(Mount point of file system)
+}
+function FindMountPointPath(const FileName: String): String;
 {en
    Change owner and group of a file (does not follow symbolic links)
    @param(path Full path to file)
@@ -146,6 +224,12 @@ function getenv(name: PAnsiChar): PAnsiChar; cdecl; external clib;
 }
 function setenv(const name, value: PAnsiChar; overwrite: cint): cint; cdecl; external clib;
 {en
+   Remove an environment variable
+   @param(name Environment variable name)
+   @returns(The function returns zero on success, or -1 on error)
+}
+function unsetenv(const name: PAnsiChar): cint; cdecl; external clib;
+{en
    Get password file entry
    @param(uid User ID)
    @returns(The function returns a pointer to a structure containing the broken-out
@@ -173,6 +257,10 @@ function getgrgid(gid: gid_t): PGroupRecord; cdecl; external clib;
             fields of the record in the group database that matches the group name)
 }
 function getgrnam(name: PChar): PGroupRecord; cdecl; external clib;
+{en
+   Get configuration information at run time
+}
+function sysconf(name: cint): clong; cdecl; external clib;
 
 function FileLock(Handle: System.THandle; Mode: cInt): System.THandle;
 
@@ -180,12 +268,12 @@ function fpMkTime(tm: PTimeStruct): TTime;
 function fpLocalTime(timer: PTime; tp: PTimeStruct): PTimeStruct;
 
 {$IF DEFINED(LINUX)}
+var
+  KernVersion: UInt16;
+
 function fpFDataSync(fd: cint): cint;
 function fpCloneFile(src_fd, dst_fd: cint): Boolean;
 function fpFAllocate(fd: cint; mode: cint; offset, len: coff_t): cint;
-
-function mbFileGetXattr(const FileName: String): TStringArray;
-function mbFileCopyXattr(const Source, Target: String): Boolean;
 {$ENDIF}
 
 {$IF DEFINED(UNIX) AND NOT DEFINED(DARWIN)}
@@ -195,7 +283,117 @@ function fnmatch(const pattern: PAnsiChar; const str: PAnsiChar; flags: cint): c
 implementation
 
 uses
-  Unix, DCConvertEncoding;
+  Unix, DCConvertEncoding, LazUTF8
+{$IF DEFINED(DARWIN)}
+  , DCDarwin
+{$ELSEIF DEFINED(LINUX)}
+  , Dos, DCLinux, DCOSUtils
+{$ELSEIF DEFINED(FREEBSD)}
+  , DCOSUtils
+{$ENDIF}
+  ;
+
+{$IF not DEFINED(LINUX)}
+function TDCStatHelper.birthtime: TFileTimeEx;
+begin
+{$IF DEFINED(HAIKU)}
+  Result.sec:= st_crtime;
+  Result.nanosec:= st_crtimensec;
+{$ELSE}
+  Result.sec:= st_birthtime;
+  Result.nanosec:= st_birthtimensec;
+{$ENDIF}
+end;
+
+function TDCStatHelper.mtime: TFileTimeEx;
+begin
+  Result.sec:= st_mtime;
+  Result.nanosec:= st_mtimensec;
+end;
+
+function TDCStatHelper.atime: TFileTimeEx;
+begin
+  Result.sec:= st_atime;
+  Result.nanosec:= st_atimensec;
+end;
+
+function TDCStatHelper.ctime: TFileTimeEx;
+begin
+  Result.sec:= st_ctime;
+  Result.nanosec:= st_ctimensec;
+end;
+{$ELSE}
+function TDCStatHelper.birthtime: TFileTimeEx;
+begin
+  Result:= TFileTimeExNull;
+end;
+
+function TDCStatHelper.mtime: TFileTimeEx;
+begin
+  Result.sec:= Int64(st_mtime);
+  Result.nanosec:= Int64(st_mtime_nsec);
+end;
+
+function TDCStatHelper.atime: TFileTimeEx;
+begin
+  Result.sec:= Int64(st_atime);
+  Result.nanosec:= Int64(st_atime_nsec);
+end;
+
+function TDCStatHelper.ctime: TFileTimeEx;
+begin
+  Result.sec:= Int64(st_ctime);
+  Result.nanosec:= Int64(st_ctime_nsec);
+end;
+{$ENDIF}
+
+
+{$IF DEFINED(DARWIN)}
+
+Function fpLstat64( path:pchar; Info:pstat ): cint; cdecl; external clib name 'lstat64';
+
+Function DC_fpLstat( const path:RawByteString; var Info:TDCStat ): cint; inline;
+var
+  SystemPath: RawByteString;
+begin
+  SystemPath:=ToSingleByteFileSystemEncodedFileName( path );
+  Result:= fpLstat64( pchar(SystemPath), @info );
+end;
+
+{$ELSE}
+
+Function DC_fpLstat( const path:RawByteString; var Info:TDCStat ): cint; inline;
+begin
+  Result:= fpLstat( path, info );
+end;
+
+{$ENDIF}
+
+function fputimes( path:pchar; times:Array of UnixType.timeval ): cint; cdecl; external clib name 'utimes';
+
+function DC_FileSetTime(const FileName: String;
+                        const mtime    : TFileTimeEx;
+                        const birthtime: TFileTimeEx;
+                        const atime    : TFileTimeEx ): Boolean;
+var
+  timevals: Array[0..1] of UnixType.timeval;
+begin
+  Result:= false;
+
+  // last access time
+  timevals[0].tv_sec:= atime.sec;
+  timevals[0].tv_usec:= round( Extended(atime.nanosec) / 1000.0 );
+  // last modification time
+  timevals[1].tv_sec:= mtime.sec;
+  timevals[1].tv_usec:= round( Extended(mtime.nanosec) / 1000.0 );
+  if fputimes(pchar(UTF8ToSys(FileName)), timevals) <> 0 then exit;
+
+  {$IF not DEFINED(DARWIN)}
+  Result:= true;
+  {$ELSE}
+  Result:= MacosFileSetCreationTime( FileName, birthtime );
+  {$ENDIF}
+end;
 
 {$IF DEFINED(BSD)}
 type rlim_t = Int64;
@@ -209,29 +407,51 @@ const
   {$ELSEIF DEFINED(BSD)}
   _SC_OPEN_MAX  = 5;
   RLIM_INFINITY = rlim_t(High(QWord) shr 1);
+  {$ELSEIF DEFINED(HAIKU)}
+  _SC_OPEN_MAX  = 20;
+  RLIMIT_NOFILE = 4;
+  RLIM_INFINITY = $ffffffff;
   {$ENDIF}
 
 procedure tzset(); cdecl; external clib;
-function sysconf(name: cint): clong; cdecl; external clib;
 function mktime(tp: PTimeStruct): TTime; cdecl; external clib;
 function localtime_r(timer: PTime; tp: PTimeStruct): PTimeStruct; cdecl; external clib;
 function lchown(path : PChar; owner : TUid; group : TGid): cInt; cdecl; external clib;
 {$IF DEFINED(LINUX)}
 function fdatasync(fd: cint): cint; cdecl; external clib;
 function fallocate(fd: cint; mode: cint; offset, len: coff_t): cint; cdecl; external clib;
+{$ENDIF}
 
-function lremovexattr(const path, name: PAnsiChar): cint; cdecl; external clib;
-function llistxattr(const path: PAnsiChar; list: PAnsiChar; size: csize_t): ssize_t; cdecl; external clib;
-function lgetxattr(const path, name: PAnsiChar; value: Pointer; size: csize_t): ssize_t; cdecl; external clib;
-function lsetxattr(const path, name: PAnsiChar; const value: Pointer; size: csize_t; flags: cint): cint; cdecl; external clib;
+{$IF DEFINED(LINUX) OR DEFINED(FREEBSD)}
+var
+  hLibC: TLibHandle = NilHandle;
+
+procedure LoadCLibrary;
+begin
+  hLibC:= mbLoadLibrary(mbGetModuleName(@tzset));
+end;
+{$ENDIF}
+
+{$IF DEFINED(LINUX) OR DEFINED(BSD)}
+var
+  close_range: function(first: cuint; last: cuint; flags: cint): cint; cdecl = nil;
 {$ENDIF}
 
 procedure FileCloseOnExecAll;
+const
+  MAX_FD = 1024;
 var
   fd: cint;
   p: TRLimit;
   fd_max: rlim_t = RLIM_INFINITY;
 begin
+{$IF DEFINED(LINUX) OR DEFINED(BSD)}
+  if Assigned(close_range) then
+  begin
+    close_range(3, High(Int32), CLOSE_RANGE_CLOEXEC);
+    Exit;
+  end;
+{$ENDIF}
   if (FpGetRLimit(RLIMIT_NOFILE, @p) = 0) and (p.rlim_cur <> RLIM_INFINITY) then
     fd_max:= p.rlim_cur
   else begin
@@ -239,8 +459,8 @@ begin
     fd_max:= sysconf(_SC_OPEN_MAX);
     {$ENDIF}
   end;
-  if fd_max = RLIM_INFINITY then
-    fd_max:= High(Byte);
+  if (fd_max = RLIM_INFINITY) or (fd_max > MAX_FD) then
+    fd_max:= MAX_FD;
   for fd:= 3 to cint(fd_max) do
     FileCloseOnExec(fd);
 end;
@@ -250,6 +470,48 @@ begin
 {$IF DECLARED(FD_CLOEXEC)}
   FpFcntl(Handle, F_SETFD, FpFcntl(Handle, F_GETFD) or FD_CLOEXEC);
 {$ENDIF}
+end;
+
+function FindMountPointPath(const FileName: String): String;
+var
+  I, J: LongInt;
+  sTemp: String;
+  recStat: Stat;
+  st_dev: QWord;
+begin
+  // Set root directory as mount point by default
+  Result:= PathDelim;
+  // Get stat info for original file
+  if (fpLStat(FileName, recStat) < 0) then Exit;
+  // Save device ID of original file
+  st_dev:= recStat.st_dev;
+  J:= Length(FileName);
+  for I:= J downto 1 do
+  begin
+    if FileName[I] = PathDelim then
+    begin
+      if (I = 1) then
+        sTemp:= PathDelim
+      else
+        sTemp:= Copy(FileName, 1, I - 1);
+      // Stat for current directory
+      if (fpLStat(sTemp, recStat) < 0) then Continue;
+      // If it is a link then checking link destination
+      if fpS_ISLNK(recStat.st_mode) then
+      begin
+        sTemp:= fpReadlink(sTemp);
+        Result:= FindMountPointPath(sTemp);
+        Exit;
+      end;
+      // Check device ID
+      if (recStat.st_dev <> st_dev) then
+      begin
+        Result:= Copy(FileName, 1, J);
+        Exit;
+      end;
+      J:= I;
+    end;
+  end;
 end;
 
 function fpLChown(path: String; owner: TUid; group: TGid): cInt;
@@ -281,6 +543,7 @@ begin
   if (fpFStatFS(Handle, @Sbfs) = 0) then
   begin
     case UInt32(Sbfs.fstype) of
+      NFS_SUPER_MAGIC,
       SMB_SUPER_MAGIC,
       SMB2_MAGIC_NUMBER,
       CIFS_MAGIC_NUMBER: Exit;
@@ -334,103 +597,28 @@ begin
   Result := fallocate(fd, mode, offset, len);
   if Result = -1 then fpseterrno(fpgetCerrno);
 end;
-
-function mbFileGetXattr(const FileName: String): TStringArray;
-var
-  AList: String;
-  ALength: ssize_t;
-  AFileName: String;
-begin
-  SetLength(AList, MaxSmallint);
-  Result:= Default(TStringArray);
-  AFileName:= CeUtf8ToSys(FileName);
-  ALength:= llistxattr(PAnsiChar(AFileName), Pointer(AList), Length(AList));
-  if (ALength < 0) then
-  begin
-    if (fpgetCerrno <> ESysERANGE) then
-    begin
-      fpseterrno(fpgetCerrno);
-      Exit;
-    end
-    else begin
-      ALength:= llistxattr(PAnsiChar(AFileName), nil, 0);
-      if ALength < 0 then
-      begin
-        fpseterrno(fpgetCerrno);
-        Exit;
-      end;
-      SetLength(AList, ALength);
-      ALength:= llistxattr(PAnsiChar(AFileName), Pointer(AList), ALength);
-      if ALength < 0 then
-      begin
-        fpseterrno(fpgetCerrno);
-        Exit;
-      end;
-    end;
-  end;
-  if (ALength > 0) then
-  begin
-    SetLength(AList, ALength - 1);
-    Result:= AList.Split(#0);
-  end;
-end;
-
-function mbFileCopyXattr(const Source, Target: String): Boolean;
-var
-  Value: String;
-  Index: Integer;
-  ALength: ssize_t;
-  Names: TStringArray;
-  ASource, ATarget: String;
-begin
-  Result:= True;
-  ASource:= CeUtf8ToSys(Source);
-  ATarget:= CeUtf8ToSys(Target);
-  // Remove attributes from target
-  Names:= mbFileGetXattr(Target);
-  for Index:= 0 to High(Names) do
-  begin
-    lremovexattr(PAnsiChar(ATarget), PAnsiChar(Names[Index]));
-  end;
-  SetLength(Value, MaxSmallint);
-  Names:= mbFileGetXattr(Source);
-  for Index:= 0 to High(Names) do
-  begin
-    ALength:= lgetxattr(PAnsiChar(ASource), PAnsiChar(Names[Index]), Pointer(Value), Length(Value));
-    if (ALength < 0) then
-    begin
-      if (fpgetCerrno <> ESysERANGE) then
-      begin
-        fpseterrno(fpgetCerrno);
-        Exit(False);
-      end
-      else begin
-        ALength:= lgetxattr(PAnsiChar(ASource), PAnsiChar(Names[Index]), nil, 0);
-        if ALength < 0 then
-        begin
-          fpseterrno(fpgetCerrno);
-          Exit(False);
-        end;
-        SetLength(Value, ALength);
-        ALength:= lgetxattr(PAnsiChar(ASource), PAnsiChar(Names[Index]), Pointer(Value), Length(Value));
-        if ALength < 0 then
-        begin
-          fpseterrno(fpgetCerrno);
-          Exit(False);
-        end;
-      end;
-    end;
-    if (lsetxattr(PAnsiChar(ATarget), PAnsiChar(Names[Index]), Pointer(Value), ALength, 0) < 0) then
-    begin
-      fpseterrno(fpgetCerrno);
-      Exit(fpgeterrno = ESysEOPNOTSUPP);
-    end;
-  end;
-end;
 {$ENDIF}
 
-initialization
+procedure Initialize;
+begin
   tzset();
+{$IF DEFINED(LINUX) OR DEFINED(FREEBSD)}
+  LoadCLibrary;
+  {$IF DEFINED(LINUX)}
+  KernVersion:= BEtoN(DosVersion);
+  // Linux kernel >= 5.11
+  if KernVersion >= $50B then
+  {$ENDIF}
+  begin
+    Pointer(close_range):= GetProcAddress(hLibC, 'close_range');
+  end;
+{$ELSEIF DEFINED(DARWIN)}
+  close_range:= @CloseRange;
+{$ENDIF}
+end;
+
+initialization
+  Initialize;
 
 end.
 

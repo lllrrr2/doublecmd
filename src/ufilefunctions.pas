@@ -189,6 +189,23 @@ var
   AType, AFunc, AParam: String;
   AFileProperty: TFileVariantProperty;
   FilePropertiesNeeded: TFilePropertiesTypes;
+
+  ADisplayName: String;
+  ADisplayNameNoExtension: String;
+  ADisplayExtension: String;
+
+  procedure prepareDisplayFileName;
+  begin
+    ADisplayName := AFileSource.GetDisplayFileName(AFile);
+    if ADisplayName = EmptyStr then begin
+      ADisplayName := AFile.Name;
+      ADisplayNameNoExtension := AFile.NameNoExt;
+      ADisplayExtension := AFile.Extension;
+    end else begin
+      TFile.SplitIntoNameAndExtension(ADisplayName, ADisplayNameNoExtension, ADisplayExtension);
+    end;
+  end;
+
 begin
   Result := EmptyStr;
   //---------------------
@@ -210,20 +227,21 @@ begin
       if aFileSource.CanRetrieveProperties(AFile, FilePropertiesNeeded) then
         aFileSource.RetrieveProperties(AFile, FilePropertiesNeeded, []);
     end;
+    prepareDisplayFileName;
     case FileFunction of
       fsfName:
         begin
           // Show square brackets around directories
           if gDirBrackets and (AFile.IsDirectory or
             AFile.IsLinkToDirectory) then
-            Result := gFolderPrefix + AFile.Name + gFolderPostfix
+            Result := gFolderPrefix + ADisplayName + gFolderPostfix
           else
-            Result := AFile.Name;
+            Result := ADisplayName;
         end;
 
       fsfExtension:
         begin
-          Result := AFile.Extension;
+          Result := ADisplayExtension;
         end;
 
       fsfSize:
@@ -238,17 +256,30 @@ begin
           end
           else if fpSize in AFile.SupportedProperties then
           begin
-            if Length(AParam) = 0 then
-              Result := AFile.Properties[fpSize].Format(DefaultFilePropertyFormatter)
-            else
-              for AIndex:= 0 to High(FILE_SIZE) do
-              begin
-                if AParam = FILE_SIZE[AIndex] then
+            if AFile.IsDirectory and (AFile.Size < 0) then
+            begin
+              case AFile.Size of
+                FOLDER_SIZE_ZERO: Result := '0';
+                FOLDER_SIZE_WAIT: Result := '??';
+                FOLDER_SIZE_CALC: Result := '--';
+                FOLDER_SIZE_ERRO: Result := '0?';
+              end;
+            end
+            else if AFile.SizeProperty.IsValid then
+            begin
+              if Length(AParam) = 0 then
+                Result := AFile.Properties[fpSize].Format(DefaultFilePropertyFormatter)
+              else begin
+                for AIndex:= 0 to High(FILE_SIZE) do
                 begin
-                  Result := cnvFormatFileSize(AFile.Size, TFileSizeFormat(AIndex), gFileSizeDigits);
-                  Break;
+                  if AParam = FILE_SIZE[AIndex] then
+                  begin
+                    Result := cnvFormatFileSize(AFile.Size, TFileSizeFormat(AIndex), gFileSizeDigits);
+                    Break;
+                  end;
                 end;
               end;
+            end;
           end;
         end;
 
@@ -320,9 +351,9 @@ begin
           // Show square brackets around directories
           if gDirBrackets and (AFile.IsDirectory or
             AFile.IsLinkToDirectory) then
-            Result := gFolderPrefix + AFile.NameNoExt + gFolderPostfix
+            Result := gFolderPrefix + ADisplayNameNoExtension + gFolderPostfix
           else
-            Result := AFile.NameNoExt;
+            Result := ADisplayNameNoExtension;
         end;
 
       fsfType:

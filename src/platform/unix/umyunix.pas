@@ -3,7 +3,7 @@
     -------------------------------------------------------------------------
     This unit contains specific UNIX functions.
 
-    Copyright (C) 2008-2021 Alexander Koblov (alexx2000@mail.ru)
+    Copyright (C) 2008-2023 Alexander Koblov (alexx2000@mail.ru)
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -47,7 +47,9 @@ type
     DE_LXDE     = 4,
     DE_MATE     = 5,
     DE_CINNAMON = 6,
-    DE_LXQT     = 7
+    DE_LXQT     = 7,
+    DE_FLY      = 8,
+    DE_FLATPAK  = 9
   );
 
 const
@@ -59,9 +61,12 @@ const
     'LXDE',
     'MATE',
     'Cinnamon',
-    'LXQt'
+    'LXQt',
+    'Fly',
+    'Flatpak'
   );
 
+{$IF DEFINED(LINUX)}
 type
   PIOFILE = Pointer;
   PFILE = PIOFILE;
@@ -77,7 +82,6 @@ type
   TMountEntry = mntent;
   PMountEntry = ^TMountEntry;
 
-{$IFDEF LINUX}
 {en
    Opens the file system description file
    @param(filename File system description file)
@@ -110,12 +114,6 @@ function FileIsLinkToFolder(const FileName: String; out LinkTarget: String): Boo
    @returns(The function returns @true if successful, @false otherwise)
 }
 function FileIsUnixExecutable(const Filename: String): Boolean;
-{en
-   Find mount point of file system where file is located
-   @param(FileName File name)
-   @returns(Mount point of file system)
-}
-function FindMountPointPath(const FileName: String): String;
 function FindExecutableInSystemPath(var FileName: String): Boolean;
 function ExecutableInSystemPath(const FileName: String): Boolean;
 function GetDefaultAppCmd(const FileName: String): String;
@@ -168,15 +166,18 @@ implementation
 
 uses
   URIParser, Unix, Process, LazUTF8, DCOSUtils, DCClassesUtf8, DCStrUtils,
-  DCUnix, uDCUtils, uOSUtils
+  LazLogger, DCUnix, uDCUtils, uOSUtils
 {$IF (NOT DEFINED(FPC_USE_LIBC)) or (DEFINED(BSD) AND NOT DEFINED(DARWIN))}
   , SysCall
 {$ENDIF}
-{$IF NOT DEFINED(DARWIN)}
-  , uMimeActions, uMimeType, uGVolume
+{$IF NOT (DEFINED(DARWIN) OR DEFINED(HAIKU))}
+  , uFontConfig, uMimeActions, uMimeType, uGVolume
+{$ENDIF}
+{$IFDEF DARWIN}
+  , uMyDarwin
 {$ENDIF}
 {$IFDEF LINUX}
-  , uUDisks, uUDisks2
+  , uUDisks2
 {$ENDIF}
   ;
 
@@ -221,6 +222,10 @@ const
                                         'XDG_SESSION_DESKTOP',
                                         'DESKTOP_SESSION');
 begin
+  if fpGetEnv(PAnsiChar('FLATPAK_ID')) <> nil then
+  begin
+    Exit(DE_FLATPAK);
+  end;
   Result:= DE_UNKNOWN;
   for I:= Low(EnvVariable) to High(EnvVariable) do
   begin
@@ -243,6 +248,8 @@ begin
       Exit(DE_MATE);
     if Pos('cinnamon', DesktopSession) <> 0 then
       Exit(DE_CINNAMON);
+    if Pos('fly', DesktopSession) <> 0 then
+      Exit(DE_FLY);
   end;
   if GetEnvironmentVariable('KDE_FULL_SESSION') <> '' then
     Exit(DE_KDE);
@@ -250,8 +257,6 @@ begin
     Exit(DE_GNOME);
   if GetEnvironmentVariable('_LXSESSION_PID') <> '' then
     Exit(DE_LXDE);
-  if fpSystemStatus('pgrep xfce4-session > /dev/null') = 0 then
-    Exit(DE_XFCE);
 end;
 
 function FileIsLinkToFolder(const FileName: String; out LinkTarget: String): Boolean;
@@ -285,9 +290,10 @@ var
   fsExeScr : TFileStreamEx = nil;
 begin
   // First check FileName is not a directory and then check if executable
-  Result:= (fpStat(UTF8ToSys(FileName), Info) <> -1) and FPS_ISREG(Info.st_mode) and
+  Result:= (fpStat(UTF8ToSys(FileName), Info) <> -1) and
+           (FPS_ISREG(Info.st_mode)) and (Info.st_size >= SizeOf(dwSign)) and
            (BaseUnix.fpAccess(UTF8ToSys(FileName), BaseUnix.X_OK) = 0);
-  if Result and (Info.st_size >= SizeOf(dwSign)) then
+  if Result then
   try
     fsExeScr := TFileStreamEx.Create(FileName, fmOpenRead or fmShareDenyNone);
     try
@@ -299,48 +305,6 @@ begin
     end;
   except
     Result:= False;
-  end;
-end;
-
-function FindMountPointPath(const FileName: String): String;
-var
-  I, J: LongInt;
-  sTemp: String;
-  recStat: Stat;
-  st_dev: QWord;
-begin
-  // Set root directory as mount point by default
-  Result:= PathDelim;
-  // Get stat info for original file
-  if (fpLStat(UTF8ToSys(FileName), recStat) < 0) then Exit;
-  // Save device ID of original file
-  st_dev:= recStat.st_dev;
-  J:= Length(FileName);
-  for I:= J downto 1 do
-  begin
-    if FileName[I] = PathDelim then
-    begin
-      if (I = 1) then
-        sTemp:= PathDelim
-      else
-        sTemp:= Copy(FileName, 1, I - 1);
-      // Stat for current directory
-      if (fpLStat(UTF8ToSys(sTemp), recStat) < 0) then Continue;
-      // If it is a link then checking link destination
-      if fpS_ISLNK(recStat.st_mode) then
-      begin
-        sTemp:= ReadSymLink(sTemp);
-        Result:= FindMountPointPath(sTemp);
-        Exit;
-      end;
-      // Check device ID
-      if (recStat.st_dev <> st_dev) then
-      begin
-        Result:= Copy(FileName, 1, J);
-        Exit;
-      end;
-      J:= I;
-    end;
   end;
 end;
 
@@ -373,7 +337,7 @@ begin
 end;
 
 function GetDefaultAppCmd(const FileName: String): String;
-{$IF NOT DEFINED(DARWIN)}
+{$IF NOT (DEFINED(DARWIN) OR DEFINED(HAIKU))}
 var
   Filenames: TStringList;
 begin
@@ -384,6 +348,10 @@ begin
   Result:= 'xdg-open ' + QuoteStr(FileName);
   FreeAndNil(Filenames);
 end;
+{$ELSEIF DEFINED(HAIKU)}
+begin
+  Result:= '/bin/open ' + QuoteStr(FileName);
+end;
 {$ELSE}
 begin
   Result:= 'xdg-open ' + QuoteStr(FileName);
@@ -391,7 +359,7 @@ end;
 {$ENDIF}
 
 function GetFileMimeType(const FileName: String): String;
-{$IF NOT DEFINED(DARWIN)}
+{$IF NOT (DEFINED(DARWIN) OR DEFINED(HAIKU))}
 begin
   Result:= uMimeType.GetFileMimeType(FileName);
 end;
@@ -503,27 +471,12 @@ begin
       if Result then
       begin
         Drive^.Path:= MountPath;
-        WriteLn(Drive^.DeviceId, ' -> ', MountPath);
+        DebugLn(Drive^.DeviceId, ' -> ', MountPath);
       end
-    end;
-    if not Result and uUDisks.Initialize then
-    begin
-      try
-        Result := uUDisks.Mount(DeviceFileToUDisksObjectPath(Drive^.DeviceId), EmptyStr, nil, MountPath);
-      except
-        on E: Exception do
-        begin
-          Result := False;
-          WriteLn(E.Message);
-        end;
-      end;
-      if Result then
-        Drive^.Path := MountPath;
-      uUDisks.Finalize;
     end;
     if not Result and HavePMount and Drive^.IsMediaRemovable then
       Result := fpSystemStatus('pmount ' + Drive^.DeviceId) = 0;
-{$ELSE IF DEFINED(DARWIN)}
+{$ELSEIF DEFINED(DARWIN)}
     if not Result then
       Result := fpSystemStatus('diskutil mount ' + Drive^.DeviceId) = 0;
 {$ENDIF}
@@ -536,7 +489,7 @@ function UnmountDrive(Drive: PDrive): Boolean;
 begin
   if Drive^.IsMounted then
   begin
-{$IF NOT DEFINED(DARWIN)}
+{$IF NOT (DEFINED(DARWIN) OR DEFINED(HAIKU))}
     if Drive^.DriveType = dtSpecial then
     begin
       Exit(uGVolume.Unmount(Drive^.Path));
@@ -546,16 +499,11 @@ begin
     Result := False;
     if HasUDisks2 then
       Result := uUDisks2.Unmount(Drive^.DeviceId);
-    if not Result and uUDisks.Initialize then
-    begin
-      Result := uUDisks.Unmount(DeviceFileToUDisksObjectPath(Drive^.DeviceId), nil);
-      uUDisks.Finalize;
-    end;
     if not Result and HavePMount and Drive^.IsMediaRemovable then
       Result := fpSystemStatus('pumount ' + Drive^.DeviceId) = 0;
     if not Result then
-{$ELSE IF DEFINED(DARWIN)}
-    Result := fpSystemStatus('diskutil unmount ' + Drive^.DeviceId) = 0;
+{$ELSEIF DEFINED(DARWIN)}
+    Result := unmountAndEject( Drive^.Path );
     if not Result then
 {$ENDIF}
     Result := fpSystemStatus('umount ' + Drive^.Path) = 0;
@@ -566,8 +514,18 @@ end;
 
 function EjectDrive(Drive: PDrive): Boolean;
 begin
-{$IF DEFINED(DARWIN)}
-  Result := fpSystemStatus('diskutil eject ' + Drive^.DeviceId) = 0;
+{$IF NOT (DEFINED(DARWIN) OR DEFINED(HAIKU))}
+  Result:= uGVolume.Eject(Drive^.Path);
+  if not Result then
+{$ENDIF}
+
+{$IF DEFINED(LINUX)}
+  Result := False;
+  if HasUDisks2 then
+    Result := uUDisks2.Eject(Drive^.DeviceId);
+  if not Result then
+{$ELSEIF DEFINED(DARWIN)}
+  Result := unmountAndEject( Drive^.Path );
   if not Result then
 {$ENDIF}
   Result := fpSystemStatus('eject ' + Drive^.DeviceId) = 0;
@@ -627,14 +585,14 @@ begin
 
       { The child does the actual exec, and then exits }
       if FpExecLP(Command, Args) = -1 then
-        Writeln(Format('Execute error %d: %s', [fpgeterrno, SysErrorMessage(fpgeterrno)]));
+        DebugLn('Execute error %d: %s', [fpgeterrno, SysErrorMessage(fpgeterrno)]);
 
       { If the FpExecLP fails, we return an exitvalue of 127, to let it be known }
       fpExit(127);
     end
   else if pid = -1 then         { Fork failed }
     begin
-      WriteLn('Fork failed: ' + Command, LineEnding, SysErrorMessage(fpgeterrno));
+      DebugLn('Fork failed: ' + Command, LineEnding, SysErrorMessage(fpgeterrno));
     end
   else if pid > 0 then          { Parent }
     begin
@@ -646,12 +604,45 @@ begin
   Result := (pid > 0);
 end;
 
-{$IF NOT DEFINED(DARWIN)}
+{$IF NOT (DEFINED(DARWIN) OR DEFINED(HAIKU))}
+function GetFontName(const AName: String): String;
+var
+  Res: TFcResult;
+  AFont: PFcPattern;
+  AFontName: PFcChar8;
+  APattern: PFcPattern;
+begin
+  Result:= AName;
+  APattern:= FcNameParse(PFcChar8(AName));
+  if Assigned(APattern) then
+  begin
+    FcConfigSubstitute(nil, APattern, FcMatchPattern);
+    FcDefaultSubstitute(APattern);
+    AFont:= FcFontMatch(nil, APattern, @Res);
+    if Assigned(AFont) then
+    begin
+      AFontName:= FcPatternFormat(AFont, '%{fullname}');
+      if Assigned(AFontName) then
+      begin
+        Result:= StrPas(AFontName);
+        FcStrFree(AFontName);
+      end;
+      FcPatternDestroy(AFont);
+    end;
+    FcPatternDestroy(APattern);
+  end;
+end;
+
 initialization
   DesktopEnv := GetDesktopEnvironment;
   {$IFDEF LINUX}
     CheckPMount;
   {$ENDIF}
+  if LoadFontConfigLib('libfontconfig.so.1') then
+  begin
+    MonoSpaceFont:= GetFontName(MonoSpaceFont);
+    UnLoadFontConfigLib;
+  end;
 {$ENDIF}
 
 end.

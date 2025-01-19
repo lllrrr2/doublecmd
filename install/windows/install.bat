@@ -31,6 +31,7 @@ mkdir  %DC_INSTALL_DIR%\plugins\wlx\wmp
 
 mkdir  %DC_INSTALL_DIR%\doc
 rem Copy directories
+xcopy /E default      %DC_INSTALL_DIR%\default\
 xcopy /E language     %DC_INSTALL_DIR%\language\
 xcopy /E pixmaps      %DC_INSTALL_DIR%\pixmaps\
 xcopy /E highlighters %DC_INSTALL_DIR%\highlighters\
@@ -39,19 +40,20 @@ copy doc\*.txt                      %DC_INSTALL_DIR%\doc\
 copy doublecmd.exe                  %DC_INSTALL_DIR%\
 copy doublecmd.help                 %DC_INSTALL_DIR%\
 copy doublecmd.zdli                 %DC_INSTALL_DIR%\
-copy doublecmd.ext.example          %DC_INSTALL_DIR%\
-copy pixmaps.txt                    %DC_INSTALL_DIR%\
-copy multiarc.ini                   %DC_INSTALL_DIR%\
 copy pinyin.tbl                     %DC_INSTALL_DIR%\
 rem Copy libraries
+copy *.sfx                          %DC_INSTALL_DIR%\
 copy *.dll                          %DC_INSTALL_DIR%\
 copy winpty-agent.exe               %DC_INSTALL_DIR%\
+rem Copy manifest
+copy install\windows\doublecmd.visualelementsmanifest.xml %DC_INSTALL_DIR%\
 
 rem copy plugins
 rem WCX
 copy  plugins\wcx\base64\base64.wcx       %DC_INSTALL_DIR%\plugins\wcx\base64\
 copy  plugins\wcx\rpm\rpm.wcx             %DC_INSTALL_DIR%\plugins\wcx\rpm\
 copy  plugins\wcx\sevenzip\sevenzip.wcx   %DC_INSTALL_DIR%\plugins\wcx\sevenzip\
+xcopy /E plugins\wcx\sevenzip\language    %DC_INSTALL_DIR%\plugins\wcx\sevenzip\language\
 copy  plugins\wcx\unrar\unrar.wcx         %DC_INSTALL_DIR%\plugins\wcx\unrar\
 xcopy /E plugins\wcx\unrar\language       %DC_INSTALL_DIR%\plugins\wcx\unrar\language\
 copy  plugins\wcx\zip\zip.wcx             %DC_INSTALL_DIR%\plugins\wcx\zip\

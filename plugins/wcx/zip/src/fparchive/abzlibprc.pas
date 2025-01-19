@@ -19,6 +19,8 @@ type
   public
     constructor Create(ALevel: Integer; ADest: TStream);
     function Write(const Buffer; Count: Longint): Longint; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+    property Hash: UInt32 read FHash;
   end;
 
   { TInflateStream }
@@ -27,6 +29,7 @@ type
   private
     FHash: UInt32;
   public
+    function CopyInto(ATarget: TStream; ACount: Int64): Int64;
     function Read(var Buffer; Count: LongInt): LongInt; override;
   end;
 
@@ -39,7 +42,7 @@ function Inflate(aSource : TStream; aDest : TStream;
 implementation
 
 uses
-  ZDeflate, ZBase, DCcrc32;
+  Math, ZDeflate, ZBase, DCcrc32;
 
 function Deflate(aSource : TStream; aDest : TStream;
                  aHelper : TAbDeflateHelper): longint;
@@ -85,11 +88,14 @@ begin
   AInflateStream:= TInflateStream.Create(aSource, True);
   try
     if aHelper.PartialSize > 0 then
-      ACount:= aHelper.PartialSize
+    begin
+      ACount:= aHelper.PartialSize;
+      aHelper.NormalSize:= AInflateStream.CopyInto(aDest, ACount);
+    end
     else begin
       ACount:= aHelper.NormalSize;
+      aHelper.NormalSize:= aDest.CopyFrom(AInflateStream, ACount);
     end;
-    aHelper.NormalSize:= aDest.CopyFrom(AInflateStream, ACount);
     aHelper.CompressedSize:= AInflateStream.compressed_read;
     Result:= LongInt(AInflateStream.FHash);
   finally
@@ -98,6 +104,29 @@ begin
 end;
 
 { TInflateStream }
+
+function TInflateStream.CopyInto(ATarget: TStream; ACount: Int64): Int64;
+var
+  ARead, ASize: Integer;
+  ABuffer: array of Byte;
+begin
+  Result:= 0;
+  ASize:= Min(ACount, $8000);
+  SetLength(ABuffer, ASize);
+  repeat
+    if ACount < ASize then
+    begin
+      ASize:= ACount;
+    end;
+    ARead:= Read(ABuffer[0], ASize);
+    if ARead > 0 then
+    begin
+      Dec(ACount, ARead);
+      Inc(Result, ARead);
+      ATarget.WriteBuffer(ABuffer[0], ARead);
+    end;
+  until (ARead < ASize) or (ACount = 0);
+end;
 
 function TInflateStream.Read(var Buffer; Count: LongInt): LongInt;
 begin
@@ -138,6 +167,15 @@ begin
   if Assigned(FOnProgressStep) then
   begin
     FOnProgressStep(raw_written * 100 div FSize);
+  end;
+end;
+
+function TDeflateStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  if (Offset = 0) and (Origin = soCurrent) then
+    Result:= raw_written
+  else begin
+    Result:= inherited Seek(Offset, Origin);
   end;
 end;
 

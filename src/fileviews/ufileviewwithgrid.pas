@@ -113,10 +113,23 @@ type
 implementation
 
 uses
-  LCLIntf, LCLType, LCLProc, LazUTF8, Math, LMessages,
+  Types, LCLIntf, LCLType, LCLProc, LazUTF8, Math, LMessages,
   DCStrUtils, uGlobs, uPixmapManager, uKeyboard,
   uDCUtils, fMain,
   uFileFunctions;
+
+{
+  Workaround
+  https://gitlab.com/freepascal.org/lazarus/lazarus/-/issues/40934
+}
+function TextFitInfo(ACanvas: TCanvas; const Text: String; MaxWidth: Integer): Integer;
+var
+  lSize: TSize;
+begin
+  Result:= 0;
+  LCLIntf.GetTextExtentExPoint(ACanvas.Handle, PChar(Text),
+                               Length(Text), MaxWidth, @Result, nil, lSize);
+end;
 
 function FitFileName(const AFileName: String; ACanvas: TCanvas; AFile: TFile; ATargetWidth: Integer): String;
 var
@@ -125,7 +138,7 @@ var
   AMaxWidth: Integer;
 begin
   Index:= UTF8Length(AFileName);
-  AMaxWidth:= ACanvas.TextFitInfo(AFileName, ATargetWidth);
+  AMaxWidth:= TextFitInfo(ACanvas, AFileName, ATargetWidth);
 
   if Index <= AMaxWidth then
     Result:= AFileName
@@ -136,7 +149,7 @@ begin
       else begin
         S:= '..';
       end;
-      Index:= ACanvas.TextFitInfo(AFileName, ATargetWidth - ACanvas.TextWidth(S));
+      Index:= TextFitInfo(ACanvas, AFileName, ATargetWidth - ACanvas.TextWidth(S));
       Result:= UTF8Copy(AFileName, 1, Index) + S;
   end;
 end;
@@ -150,13 +163,13 @@ var
   AMaxWidth: Integer;
 begin
   Index:= UTF8Length(sStringToFit);
-  AMaxWidth:= ACanvas.TextFitInfo(sStringToFit, ATargetWidth);
+  AMaxWidth:= TextFitInfo(ACanvas, sStringToFit, ATargetWidth);
 
   if Index <= AMaxWidth then
     Result:= sStringToFit
   else
     begin
-      Index:= ACanvas.TextFitInfo(sStringToFit, ATargetWidth - ACanvas.TextWidth(ELLIPSIS));
+      Index:= TextFitInfo(ACanvas, sStringToFit, ATargetWidth - ACanvas.TextWidth(ELLIPSIS));
       Result:= UTF8Copy(sStringToFit, 1, Index) + ELLIPSIS;
     end;
 end;
@@ -268,11 +281,16 @@ begin
 
   if MouseOnGrid(X, Y) then
     inherited MouseDown(Button, Shift, X, Y)
-  else
+  else begin
+    if Assigned(OnMouseDown) then
     begin
-      if Assigned(OnMouseDown) then
-        OnMouseDown(Self, Button, Shift, X, Y);
+      OnMouseDown(Self, Button, Shift, X, Y);
     end;
+    if not Focused then
+    begin
+      if CanSetFocus then SetFocus;
+    end;
+  end;
 end;
 
 procedure TFileViewGrid.MouseUp(Button: TMouseButton; Shift: TShiftState; X,
@@ -364,10 +382,13 @@ begin
   // Draw frame cursor.
   if gUseFrameCursor and (gdSelected in aState) and (FFileView.Active or gUseInactiveSelColor) then
   begin
-    if FFileView.Active then
-      Canvas.Pen.Color := gCursorColor
-    else begin
-      Canvas.Pen.Color := gInactiveCursorColor;
+    with gColors.FilePanel^ do
+    begin
+      if FFileView.Active then
+        Canvas.Pen.Color := CursorColor
+      else begin
+        Canvas.Pen.Color := InactiveCursorColor;
+      end;
     end;
     Canvas.Rectangle(Rect(aRect.Left+delta, aRect.Top+delta , aRect.Right - delta, aRect.Bottom - delta));
   end;
@@ -375,7 +396,7 @@ begin
   // Draw drop selection.
   if (FFileView.FDropFileIndex >= 0) and (aIdx = FFileView.FDropFileIndex) then
   begin
-    Canvas.Pen.Color := gForeColor;
+    Canvas.Pen.Color := gColors.FilePanel^.ForeColor;
     Canvas.Rectangle(Rect(aRect.Left+delta, aRect.Top+delta , aRect.Right - delta, aRect.Bottom - delta));
   end;
   Canvas.Brush.Style:=bsSolid;
@@ -395,58 +416,60 @@ begin
 
   IsCursor := (gdSelected in aState) and FFileView.Active and (not gUseFrameCursor);
   IsCursorInactive := (gdSelected in aState) and (not FFileView.Active) and (not gUseFrameCursor);
-  // Set up default background color first.
-  if IsCursor then
-    BackgroundColor := gCursorColor
-  else
-    begin
-      if IsCursorInactive AND gUseInactiveSelColor then
-        BackgroundColor := gInactiveCursorColor
-      else
-        // Alternate rows background color.
-        if odd(ARow) then
-          BackgroundColor := gBackColor
-        else
-          BackgroundColor := gBackColor2;
-    end;
-
-  // Set text color.
-  TextColor := AFile.TextColor;
-  if (TextColor = clDefault) or (TextColor = clNone) then
-    TextColor := gForeColor;
-
-  if AFile.Selected then
+  with gColors.FilePanel^ do
   begin
-    if gUseInvertedSelection then
-      begin
-        //------------------------------------------------------
-        if IsCursor OR (IsCursorInactive AND gUseInactiveSelColor) then
-          begin
-            TextColor := InvertColor(gCursorText);
-          end
-        else
-          begin
-            if FFileView.Active OR (not gUseInactiveSelColor) then
-              BackgroundColor := gMarkColor
-            else
-              BackgroundColor := gInactiveMarkColor;
-            TextColor := gBackColor;
-          end;
-        //------------------------------------------------------
-      end
+    // Set up default background color first.
+    if IsCursor then
+      BackgroundColor := CursorColor
     else
       begin
-        if FFileView.Active OR (not gUseInactiveSelColor) then
-          TextColor := gMarkColor
+        if IsCursorInactive AND gUseInactiveSelColor then
+          BackgroundColor := InactiveCursorColor
         else
-          TextColor := gInactiveMarkColor;
+          // Alternate rows background color.
+          if odd(ARow) then
+            BackgroundColor := BackColor
+          else
+            BackgroundColor := BackColor2;
       end;
-  end
-  else if IsCursor then
-    begin
-      TextColor := gCursorText;
-    end;
 
+    // Set text color.
+    TextColor := AFile.TextColor;
+    if (TextColor = clDefault) or (TextColor = clNone) then
+      TextColor := ForeColor;
+
+    if AFile.Selected then
+    begin
+      if gUseInvertedSelection then
+        begin
+          //------------------------------------------------------
+          if IsCursor OR (IsCursorInactive AND gUseInactiveSelColor) then
+            begin
+              TextColor := InvertColor(CursorText);
+            end
+          else
+            begin
+              if FFileView.Active OR (not gUseInactiveSelColor) then
+                BackgroundColor := MarkColor
+              else
+                BackgroundColor := InactiveMarkColor;
+              TextColor := BackColor;
+            end;
+          //------------------------------------------------------
+        end
+      else
+        begin
+          if FFileView.Active OR (not gUseInactiveSelColor) then
+            TextColor := MarkColor
+          else
+            TextColor := InactiveMarkColor;
+        end;
+    end
+    else if IsCursor then
+      begin
+        TextColor := CursorText;
+      end;
+  end;
   BackgroundColor := FFileView.DimColor(BackgroundColor);
 
   if AFile.RecentlyUpdatedPct <> 0 then
@@ -500,9 +523,7 @@ begin
   DoubleBuffered := True;
   Align := alClient;
   MouseWheelOption:= mwGrid;
-{$if lcl_fullversion >= 1080004}
   AllowOutboundEvents := False;
-{$endif}
   Options := [goTabs, goThumbTracking];
   TabStop := False;
 
@@ -555,12 +576,14 @@ var
 begin
   ScrollTo := IsActiveFileVisible;
 
-  // Update grid col and row count
-  dgPanel.SetColRowCount(FFiles.Count);
-
+  // Row count updates and Content updates should be grouped in one transaction
+  // otherwise, Grids may have subtle synchronization issues.
+  dgPanel.BeginUpdate;
+  dgPanel.SetColRowCount(FFiles.Count); // Update grid col and row count
   dgPanel.CalculateColRowCount;
   dgPanel.CalculateColumnWidth;
   SetFilesDisplayItems;
+  dgPanel.EndUpdate;
 
   if SetActiveFileNow(RequestedActiveFile, True, FLastTopRowIndex) then
     RequestedActiveFile := ''
@@ -595,6 +618,9 @@ begin
                            fpAttributes,      // For distinguishing directories
                            fpLink,            // For distinguishing directories (link to dir) and link icons
                            fpModificationTime // For selecting/coloring files (by SearchTemplate)
+                           {$IFDEF DARWIN}
+                           ,fpMacOSFinderTag    // macOS finder tag
+                           {$ENDIF}
                           ];
 end;
 
@@ -637,6 +663,8 @@ end;
 
 function TFileViewWithGrid.GetActiveFileIndex: PtrInt;
 begin
+  if dgPanel=nil then
+    Exit;
   Result := dgPanel.CellToIndex(dgPanel.Col, dgPanel.Row);
 end;
 
@@ -826,7 +854,7 @@ var
 begin
   inherited DoUpdateView;
   dgPanel.FocusRectVisible := gUseCursorBorder and not gUseFrameCursor;
-  dgPanel.FocusColor := gCursorBorderColor;
+  dgPanel.FocusColor := gColors.FilePanel^.CursorBorderColor;
   dgPanel.UpdateView;
   TabHeader.Visible := gTabHeader;
   // Set rows of header.

@@ -1,8 +1,8 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: Double Commander 0.9.6 beta\n"
+"Project-Id-Version: Double Commander 1.1.0 alpha\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2008-01-17 23:08+0300\n"
+"POT-Creation-Date: 2022-11-15 11:15+0300\n"
 "PO-Revision-Date: 2020-01-11 16:32+0200\n"
 "Last-Translator: Full Name <bolle_barnewitz@sol.dk>\n"
 "Language-Team: Language <bolle_barnewitz@sol.dk>\n"
@@ -13,34 +13,34 @@ msgstr ""
 "X-Generator: Poedit 2.2.4\n"
 "Language: da\n"
 
-#: foptionscolors.rsdarkmodeoptions
-msgid "Auto;Enabled;Disabled"
-msgstr ""
-
 #: fsyncdirsdlg.rscomparingpercent
+#, object-pascal-format
 msgid "Comparing... %d%% (ESC to cancel)"
 msgstr "Læser mapper: %d%% (ESC for at afbryde)"
 
 #: fsyncdirsdlg.rsdeleteleft
+#, object-pascal-format
 msgid "Left: Delete %d file(s)"
 msgstr ""
 
 #: fsyncdirsdlg.rsdeleteright
+#, object-pascal-format
 msgid "Right: Delete %d file(s)"
 msgstr "Højre: Slet %d file(r)"
 
 #: fsyncdirsdlg.rsfilesfound
+#, object-pascal-format
 msgid "Files found: %d  (Identical: %d, Different: %d, Unique left: %d, Unique right: %d)"
 msgstr "Filer fundet: %d  (Identiske: %d, Forskellige: %d, Unikke venstre: %d, Unikke højre: %d)"
 
 #: fsyncdirsdlg.rslefttorightcopy
-#, fuzzy,badformat
+#, object-pascal-format, fuzzy, badformat
 #| msgid "Left to Right: Copy %d files, total size: %d bytes"
 msgid "Left to Right: Copy %d files, total size: %s (%s)"
 msgstr "Venstre til højre: Kopier %d fil(er), totalt: %d bytes"
 
 #: fsyncdirsdlg.rsrighttoleftcopy
-#, fuzzy,badformat
+#, object-pascal-format, fuzzy, badformat
 #| msgid "Right to Left: Copy %d files, total size: %d bytes"
 msgid "Right to Left: Copy %d files, total size: %s (%s)"
 msgstr "Højre til venstre: Kopier %d fil(er), totalt: %d bytes"
@@ -320,6 +320,7 @@ msgid "Benchmark"
 msgstr "Benchmark"
 
 #: tfrmbenchmark.lblbenchmarksize.caption
+#, object-pascal-format
 msgid "Benchmark data size: %d MB"
 msgstr "Benchmark datastørrelse: %d MB"
 
@@ -351,10 +352,26 @@ msgstr "&Åbn kontrolsumfil efter opgaven er færdig"
 msgid "C&reate separate checksum file for each file"
 msgstr "Dan en &separat kontrolsumfil for hver fil"
 
+#: tfrmchecksumcalc.cbseparatefolder.caption
+msgid "Create separate checksum file for each &directory"
+msgstr ""
+
+#: tfrmchecksumcalc.lblfileformat.caption
+msgid "File &format"
+msgstr ""
+
 # Filer - Dan_CRC_kontrolsumfil(er)
 #: tfrmchecksumcalc.lblsaveto.caption
 msgid "&Save checksum file(s) to:"
 msgstr "Gem kontrol&sum-fil(er) som:"
+
+#: tfrmchecksumcalc.rbunix.caption
+msgid "Unix"
+msgstr ""
+
+#: tfrmchecksumcalc.rbwindows.caption
+msgid "Windows"
+msgstr ""
 
 # Filer - Kontrollér_CRC_kontrolsumfil(er)...
 #: tfrmchecksumverify.btnclose.caption
@@ -367,6 +384,12 @@ msgstr "&Luk"
 msgctxt "tfrmchecksumverify.caption"
 msgid "Verify checksum..."
 msgstr "Verifikation af kontrolsum"
+
+#: tfrmchooseencoding.caption
+#, fuzzy
+msgctxt "tfrmchooseencoding.caption"
+msgid "Encoding"
+msgstr "Koder"
 
 #: tfrmconnectionmanager.btnadd.caption
 msgctxt "tfrmconnectionmanager.btnadd.caption"
@@ -502,6 +525,7 @@ msgid "Auto Compare"
 msgstr "Sammenlign automatisk"
 
 #: tfrmdiffer.actbinarycompare.caption
+msgctxt "tfrmdiffer.actbinarycompare.caption"
 msgid "Binary Mode"
 msgstr "&Binær tilstand"
 
@@ -1100,14 +1124,6 @@ msgstr "Gem &som..."
 msgid "Save As"
 msgstr "Gem som"
 
-#: tfrmeditor.actsaveall.caption
-msgid "Sa&ve All"
-msgstr "Gem alle"
-
-#: tfrmeditor.actsaveall.hint
-msgid "Save All"
-msgstr "Gem alle"
-
 #: tfrmeditor.caption
 msgctxt "tfrmeditor.caption"
 msgid "Editor"
@@ -1168,7 +1184,7 @@ msgstr ""
 msgid "C&ase sensitivity"
 msgstr ""
 "Forskel på STORE\n"
-" og små &bogstaver\n"
+" og små &bogstaver"
 
 #: tfrmeditsearchreplace.cbsearchfromcursor.caption
 msgid "S&earch from caret"
@@ -1288,23 +1304,6 @@ msgstr "Fra:"
 msgid "To:"
 msgstr "Til:"
 
-#: tfrmfileproperties.btnclose.caption
-msgctxt "TFRMFILEPROPERTIES.BTNCLOSE.CAPTION"
-msgid "&Close"
-msgstr "&Luk"
-
-#: tfrmfileproperties.btnsetproperties.caption
-msgid "&Set properties"
-msgstr "Ind&stil egenskaber"
-
-#: tfrmfileproperties.btnsetpropertiestoallfiles.caption
-msgid "Set to &all selected files"
-msgstr "Indstil &alle valgte filer"
-
-#: tfrmfileproperties.btnskipfile.caption
-msgid "Ski&p this file"
-msgstr "S&pring filen over"
-
 #: tfrmfileproperties.caption
 msgctxt "tfrmfileproperties.caption"
 msgid "Properties"
@@ -1330,8 +1329,12 @@ msgstr "SUID"
 msgid "Allow &executing file as program"
 msgstr "Tillad &eksekvering af filen som program"
 
-#: tfrmfileproperties.gbowner.caption
-msgctxt "TFRMFILEPROPERTIES.GBOWNER.CAPTION"
+#: tfrmfileproperties.chkrecursive.caption
+msgid "&Recursive"
+msgstr ""
+
+#: tfrmfileproperties.dividerbevel3.caption
+msgctxt "TFRMFILEPROPERTIES.DIVIDERBEVEL3.CAPTION"
 msgid "Owner"
 msgstr "Ejer"
 
@@ -1369,6 +1372,12 @@ msgstr "Tekst:"
 msgid "Contains:"
 msgstr "Indeholder:"
 
+#: tfrmfileproperties.lblcreatedstr.caption
+#, fuzzy
+msgctxt "tfrmfileproperties.lblcreatedstr.caption"
+msgid "Created:"
+msgstr "Oprettet:"
+
 #: tfrmfileproperties.lblexec.caption
 msgctxt "TFRMFILEPROPERTIES.LBLEXEC.CAPTION"
 msgid "Execute"
@@ -1403,16 +1412,26 @@ msgid "&Group"
 msgstr "Gruppe:"
 
 #: tfrmfileproperties.lbllastaccessstr.caption
-msgid "Last access:"
+msgctxt "tfrmfileproperties.lbllastaccessstr.caption"
+msgid "Accessed:"
 msgstr "Åbnet:"
 
 #: tfrmfileproperties.lbllastmodifstr.caption
-msgid "Last modification:"
+msgctxt "tfrmfileproperties.lbllastmodifstr.caption"
+msgid "Modified:"
 msgstr "Ændret:"
 
 #: tfrmfileproperties.lbllaststchangestr.caption
-msgid "Last status change:"
+msgid "Status changed:"
 msgstr "Attributter ændret:"
+
+#: tfrmfileproperties.lbllinksstr.caption
+msgid "Links:"
+msgstr ""
+
+#: tfrmfileproperties.lblmediatypestr.caption
+msgid "Media type:"
+msgstr ""
 
 #: tfrmfileproperties.lbloctal.caption
 msgctxt "tfrmfileproperties.lbloctal.caption"
@@ -1427,6 +1446,10 @@ msgstr "Ejer:"
 msgctxt "TFRMFILEPROPERTIES.LBLREAD.CAPTION"
 msgid "Read"
 msgstr "Læs"
+
+#: tfrmfileproperties.lblsizeondiskstr.caption
+msgid "Size on disk:"
+msgstr ""
 
 #: tfrmfileproperties.lblsizestr.caption
 msgctxt "tfrmfileproperties.lblsizestr.caption"
@@ -1446,13 +1469,13 @@ msgctxt "TFRMFILEPROPERTIES.LBLWRITE.CAPTION"
 msgid "Write"
 msgstr "Skriv"
 
-#: tfrmfileproperties.sgimage.columns[0].title.caption
-msgctxt "tfrmfileproperties.sgimage.columns[0].title.caption"
+#: tfrmfileproperties.sgplugins.columns[0].title.caption
+msgctxt "tfrmfileproperties.sgplugins.columns[0].title.caption"
 msgid "Name"
 msgstr "Navn"
 
-#: tfrmfileproperties.sgimage.columns[1].title.caption
-msgctxt "tfrmfileproperties.sgimage.columns[1].title.caption"
+#: tfrmfileproperties.sgplugins.columns[1].title.caption
+msgctxt "tfrmfileproperties.sgplugins.columns[1].title.caption"
 msgid "Value"
 msgstr "Værdi"
 
@@ -1661,7 +1684,7 @@ msgstr "Find filer"
 msgid "Case sens&itive"
 msgstr ""
 "Forskel på STORE\n"
-" og små &bogstaver\n"
+" og små &bogstaver"
 
 #: tfrmfinddlg.cbdatefrom.caption
 msgid "&Date from:"
@@ -1782,30 +1805,6 @@ msgstr "Indtast filnavnene, som skal udelades i søgningen adskilt med \";\""
 #: tfrmfinddlg.cmbfindfilemask.hint
 msgid "Enter files names separated with \";\""
 msgstr "Indtast filnavne adskilt med \";\""
-
-#: tfrmfinddlg.frmcontentplugins.headercontrol.sections[0].text
-#, fuzzy
-msgctxt "tfrmfinddlg.frmcontentplugins.headercontrol.sections[0].text"
-msgid "Plugin"
-msgstr "Plugin"
-
-#: tfrmfinddlg.frmcontentplugins.headercontrol.sections[1].text
-#, fuzzy
-msgctxt "tfrmfinddlg.frmcontentplugins.headercontrol.sections[1].text"
-msgid "Field"
-msgstr "Felt"
-
-#: tfrmfinddlg.frmcontentplugins.headercontrol.sections[2].text
-#, fuzzy
-msgctxt "tfrmfinddlg.frmcontentplugins.headercontrol.sections[2].text"
-msgid "Operator"
-msgstr "Operator"
-
-#: tfrmfinddlg.frmcontentplugins.headercontrol.sections[3].text
-#, fuzzy
-msgctxt "tfrmfinddlg.frmcontentplugins.headercontrol.sections[3].text"
-msgid "Value"
-msgstr "Værdi"
 
 #: tfrmfinddlg.gbdirectories.caption
 msgctxt "tfrmfinddlg.gbdirectories.caption"
@@ -2602,6 +2601,11 @@ msgstr "Ind&læs faneblade fra fil"
 msgid "Create &Directory"
 msgstr "Ny mappe"
 
+# Netværk
+#: tfrmmain.actmapnetworkdrive.caption
+msgid "Map Network Drive..."
+msgstr "Opret net&værksdrev..."
+
 # Marker
 #: tfrmmain.actmarkcurrentextension.caption
 msgid "Select All with the Same E&xtension"
@@ -2874,6 +2878,10 @@ msgstr "Åbn terminal (komman&do-prompt)"
 msgid "Save current tabs to a New Favorite Tabs"
 msgstr "Gem aktuelt faneblad som nyt Favoritfaneblad"
 
+#: tfrmmain.actsavefiledetailstofile.caption
+msgid "Save all shown columns to file"
+msgstr ""
+
 # Marker
 #: tfrmmain.actsaveselection.caption
 msgid "Sa&ve Selection"
@@ -2963,6 +2971,14 @@ msgstr "Menu"
 #: tfrmmain.actshowsysfiles.caption
 msgid "Show &Hidden/System Files"
 msgstr "Vis skj&ulte/system-filer"
+
+#: tfrmmain.actshowtabslist.caption
+msgid "Show Tabs List"
+msgstr ""
+
+#: tfrmmain.actshowtabslist.hint
+msgid "Show list of all open tabs"
+msgstr ""
 
 # Vis
 #: tfrmmain.actsortbyattr.caption
@@ -3334,7 +3350,7 @@ msgstr "&Opsætning"
 
 # In the menu bar
 #: tfrmmain.mnufavoritetabs.caption
-msgid "Favorites"
+msgid "F&avorites"
 msgstr "Favo&ritter"
 
 #: tfrmmain.mnufiles.caption
@@ -3354,7 +3370,7 @@ msgstr "&Marker"
 
 #: tfrmmain.mnunetwork.caption
 msgctxt "tfrmmain.mnunetwork.caption"
-msgid "Network"
+msgid "&Network"
 msgstr "&Netværk"
 
 # Vis
@@ -3602,34 +3618,10 @@ msgstr "JPG-komprimering"
 msgid "Width :"
 msgstr "Width :"
 
-#: tfrmmodview.rbbmp.caption
-msgid "BMP"
-msgstr "BMP"
-
-#: tfrmmodview.rbico.caption
-msgid "ICO"
-msgstr "ICO"
-
-#: tfrmmodview.rbjpg.caption
-msgid "JPG"
-msgstr "JPG"
-
-#: tfrmmodview.rbpng.caption
-msgid "PNG"
-msgstr "PNG"
-
-#: tfrmmodview.rbpnm.caption
-msgid "PNM"
-msgstr "PNM"
-
 #: tfrmmodview.teheight.text
 msgctxt "tfrmmodview.teheight.text"
 msgid "Height"
 msgstr "Højde"
-
-#: tfrmmodview.tequality.text
-msgid "80"
-msgstr "80"
 
 #: tfrmmodview.tewidth.text
 msgctxt "tfrmmodview.tewidth.text"
@@ -4012,6 +4004,7 @@ msgid "Set selected application as default action"
 msgstr "Brug altid det valgte program til at åbne denne type fil"
 
 #: tfrmopenwith.lblmimetype.caption
+#, object-pascal-format
 msgid "File type to be opened: %s"
 msgstr "Filtype som skal åbnes: %s"
 
@@ -4020,6 +4013,7 @@ msgid "Multiple file names"
 msgstr "Flere filnavne"
 
 #: tfrmopenwith.milistoffiles.hint
+#, object-pascal-format
 msgid "%F"
 msgstr "%F"
 
@@ -4028,6 +4022,7 @@ msgid "Multiple URIs"
 msgstr "Flere URL'er"
 
 #: tfrmopenwith.milistofurls.hint
+#, object-pascal-format
 msgid "%U"
 msgstr "%U"
 
@@ -4036,6 +4031,7 @@ msgid "Single file name"
 msgstr "Enkelt filnavn"
 
 #: tfrmopenwith.misinglefilename.hint
+#, object-pascal-format
 msgid "%f"
 msgstr "%f"
 
@@ -4044,6 +4040,7 @@ msgid "Single URI"
 msgstr "Enkelt URL"
 
 #: tfrmopenwith.misingleurl.hint
+#, object-pascal-format
 msgid "%u"
 msgstr "%u"
 
@@ -4056,6 +4053,12 @@ msgstr "&Udfør"
 msgctxt "TFRMOPTIONS.BTNCANCEL.CAPTION"
 msgid "&Cancel"
 msgstr "&Annuller"
+
+# Opsætning - Indstillinger - Favoritmappe - Hjælp
+#: tfrmoptions.btnhelp.caption
+msgctxt "tfrmoptions.btnhelp.caption"
+msgid "&Help"
+msgstr "Hjælp"
 
 #: tfrmoptions.btnok.caption
 msgctxt "TFRMOPTIONS.BTNOK.CAPTION"
@@ -4194,6 +4197,10 @@ msgstr "Vi&s konsollens output"
 #: tfrmoptionsarchivers.chkfilenameonlylist.caption
 msgid "Use archive name without extension as list"
 msgstr "Anvend arkivnavn uden filendelse som liste"
+
+#: tfrmoptionsarchivers.chkhide.caption
+msgid "Show as normal files"
+msgstr ""
 
 # Opsætning - Indstillinger - Pakkeprogrammer - Ekstra
 #: tfrmoptionsarchivers.ckbarchiverunixfileattributes.caption
@@ -4456,8 +4463,120 @@ msgstr "Fast antal kolonner:"
 msgid "Fixed columns width"
 msgstr "Fast kolonnebredde:"
 
+# Opsætning - Indstillinger - Farver - Filvindue
+#: tfrmoptionscolors.cbbusegradientind.caption
+msgid "Use &Gradient Indicator"
+msgstr "Anvend flydende farveover&gange (grøn - gul - rød)"
+
+#: tfrmoptionscolors.dbbinarymode.caption
+#, fuzzy
+msgctxt "tfrmoptionscolors.dbbinarymode.caption"
+msgid "Binary Mode"
+msgstr "&Binær tilstand"
+
+#: tfrmoptionscolors.dbbookmode.caption
+msgid "Book Mode"
+msgstr ""
+
+#: tfrmoptionscolors.dbimagemode.caption
+msgid "Image Mode"
+msgstr ""
+
+#: tfrmoptionscolors.dbtextmode.caption
+msgid "Text Mode"
+msgstr ""
+
+#: tfrmoptionscolors.lbladded.caption
+msgid "Added:"
+msgstr ""
+
+#: tfrmoptionscolors.lblbookbackground.caption
+msgctxt "tfrmoptionscolors.lblbookbackground.caption"
+msgid "Background:"
+msgstr ""
+
+#: tfrmoptionscolors.lblbooktext.caption
+#, fuzzy
+msgctxt "tfrmoptionscolors.lblbooktext.caption"
+msgid "Text:"
+msgstr "Tekst:"
+
+#: tfrmoptionscolors.lblcategory.caption
+msgid "Category:"
+msgstr ""
+
+#: tfrmoptionscolors.lbldeleted.caption
+msgid "Deleted:"
+msgstr ""
+
+#: tfrmoptionscolors.lblerror.caption
+msgid "Error:"
+msgstr ""
+
+#: tfrmoptionscolors.lblimagebackground1.caption
+msgid "Background 1:"
+msgstr ""
+
+#: tfrmoptionscolors.lblimagebackground2.caption
+#, fuzzy
+msgctxt "tfrmoptionscolors.lblimagebackground2.caption"
+msgid "Background 2:"
+msgstr "Baggrund &2:"
+
+# Opsætning - Indstillinger - Farver - Filvindue
+#: tfrmoptionscolors.lblindbackcolor.caption
+msgid "In&dicator Back Color:"
+msgstr "Farve for le&dig plads:"
+
+# Opsætning - Indstillinger - Farver - Filvindue
+#: tfrmoptionscolors.lblindcolor.caption
+msgid "&Indicator Fore Color:"
+msgstr "Farve for brugt plads:"
+
+#: tfrmoptionscolors.lblindthresholdcolor.caption
+msgid "Indicator &Threshold Color:"
+msgstr ""
+
+#: tfrmoptionscolors.lblinformation.caption
+msgid "Information:"
+msgstr ""
+
+#: tfrmoptionscolors.lblleft.caption
+msgid "Left:"
+msgstr ""
+
+#: tfrmoptionscolors.lblmodified.caption
+#, fuzzy
+msgctxt "tfrmoptionscolors.lblmodified.caption"
+msgid "Modified:"
+msgstr "Ændret:"
+
+#: tfrmoptionscolors.lblmodifiedbinary.caption
+#, fuzzy
+msgctxt "tfrmoptionscolors.lblmodifiedbinary.caption"
+msgid "Modified:"
+msgstr "Ændret:"
+
+#: tfrmoptionscolors.lblright.caption
+msgid "Right:"
+msgstr ""
+
+#: tfrmoptionscolors.lblsuccess.caption
+#, fuzzy
+msgctxt "tfrmoptionscolors.lblsuccess.caption"
+msgid "Success:"
+msgstr "Lykkedes:"
+
+#: tfrmoptionscolors.lblunknown.caption
+msgid "Unknown:"
+msgstr ""
+
 #: tfrmoptionscolors.rgdarkmode.caption
-msgid "Dark mode"
+msgid "State"
+msgstr ""
+
+#: tfrmoptionscolumnsview.cbcolumnstitlelikevalues.caption
+msgid "Column titles alignment &like values"
 msgstr ""
 
 # Opsætning  - Indstillinger - Visning - Kolonner
@@ -4999,6 +5118,7 @@ msgid "BackGround:"
 msgstr "&Baggrund:"
 
 #: tfrmoptionscustomcolumns.lblbackcolor2.caption
+msgctxt "tfrmoptionscustomcolumns.lblbackcolor2.caption"
 msgid "Background 2:"
 msgstr "Baggrund &2:"
 
@@ -5035,6 +5155,7 @@ msgstr "Størrelse"
 
 # Opsætning - Indstillinger - Visning - Kolonner - Brugertilpassede kolonner - Brug brugerdefinerede skrifttyper[...]
 #: tfrmoptionscustomcolumns.lblforecolor.caption
+msgctxt "tfrmoptionscustomcolumns.lblforecolor.caption"
 msgid "Text Color:"
 msgstr "&Skriftfarve:"
 
@@ -5285,12 +5406,6 @@ msgstr "Slet..."
 msgctxt "tfrmoptionsdirectoryhotlist.btnexport.caption"
 msgid "E&xport..."
 msgstr "Eksportér..."
-
-# Opsætning - Indstillinger - Favoritmappe - Hjælp
-#: tfrmoptionsdirectoryhotlist.btnhelp.caption
-msgctxt "TFRMOPTIONSDIRECTORYHOTLIST.BTNHELP.CAPTION"
-msgid "&Help"
-msgstr "Hjælp"
 
 # Opsætning - Indstillinger - Favoritmappe - Importér...
 #: tfrmoptionsdirectoryhotlist.btnimport.caption
@@ -5593,6 +5708,14 @@ msgstr "Autoindrykning"
 msgid "Allows to indent the caret, when new line is created with <Enter>, with the same amount of leading white space as the preceding line"
 msgstr "Tillad indrykning af markør, når der oprettes en ny linje med <Enter>, med den samme mængde indledende hvid plads som den foregående linje "
 
+#: tfrmoptionseditor.chkgroupundo.caption
+msgid "Group Undo"
+msgstr ""
+
+#: tfrmoptionseditor.chkgroupundo.hint
+msgid "All continuous changes of the same type will be processed in one call instead of undoing/redoing each one"
+msgstr ""
+
 #: tfrmoptionseditor.chkrightedge.caption
 msgid "Right margin:"
 msgstr ""
@@ -5657,6 +5780,10 @@ msgstr "Bemærk, at indstillingen  \"Smart Tabs \" har forrang for tabuleringen,
 #: tfrmoptionseditor.gbinternaleditor.caption
 msgid "Internal editor options"
 msgstr "Indstillinger (intern fremviser)"
+
+#: tfrmoptionseditor.lblblockindent.caption
+msgid "Block indent:"
+msgstr ""
 
 # Opsætning - Indstillinger - Værktøjer - Editor
 #: tfrmoptionseditor.lbltabwidth.caption
@@ -6297,6 +6424,10 @@ msgstr "Klik på mig for at ændre ikon!"
 msgid "Apply current settings to all current configured filenames and paths"
 msgstr ""
 
+#: tfrmoptionsfileassocextra.cbdefaultcontextactions.caption
+msgid "Default context actions (View/Edit)"
+msgstr ""
+
 # Opsætning - Indstillinger - Filassociationer -  Filassociationer_ekstra
 #: tfrmoptionsfileassocextra.cbexecuteviashell.caption
 msgctxt "tfrmoptionsfileassocextra.cbexecuteviashell.caption"
@@ -6474,61 +6605,6 @@ msgstr "Stil for auto-omdøbning af dubletter:"
 msgid "&Number of wipe passes:"
 msgstr "A&ntal overskrivninger ved sikker sletning:"
 
-#: tfrmoptionsfilepanelscolors.btnbackcolor.caption
-msgctxt "TFRMOPTIONSFILEPANELSCOLORS.BTNBACKCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionsfilepanelscolors.btnbackcolor2.caption
-msgctxt "TFRMOPTIONSFILEPANELSCOLORS.BTNBACKCOLOR2.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionsfilepanelscolors.btncursorbordercolor.caption
-msgctxt "TFRMOPTIONSFILEPANELSCOLORS.BTNCURSORBORDERCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionsfilepanelscolors.btncursorcolor.caption
-msgctxt "TFRMOPTIONSFILEPANELSCOLORS.BTNCURSORCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionsfilepanelscolors.btncursortext.caption
-msgctxt "TFRMOPTIONSFILEPANELSCOLORS.BTNCURSORTEXT.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionsfilepanelscolors.btnforecolor.caption
-msgctxt "TFRMOPTIONSFILEPANELSCOLORS.BTNFORECOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionsfilepanelscolors.btninactivecursorcolor.caption
-msgctxt "TFRMOPTIONSFILEPANELSCOLORS.BTNINACTIVECURSORCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionsfilepanelscolors.btninactivemarkcolor.caption
-msgctxt "TFRMOPTIONSFILEPANELSCOLORS.BTNINACTIVEMARKCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionsfilepanelscolors.btnindbackcolor.caption
-msgctxt "TFRMOPTIONSFILEPANELSCOLORS.BTNINDBACKCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionsfilepanelscolors.btnindcolor.caption
-msgctxt "TFRMOPTIONSFILEPANELSCOLORS.BTNINDCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionsfilepanelscolors.btnmarkcolor.caption
-msgctxt "TFRMOPTIONSFILEPANELSCOLORS.BTNMARKCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
 # Opsætning - Indstillinger - Farver - Filvindue
 #: tfrmoptionsfilepanelscolors.btnresettodcdefault.caption
 msgid "Reset to DC default"
@@ -6546,11 +6622,6 @@ msgid "Use &Frame Cursor"
 msgstr "Ma&rkeret som ramme"
 
 # Opsætning - Indstillinger - Farver - Filvindue
-#: tfrmoptionsfilepanelscolors.cbbusegradientind.caption
-msgid "Use &Gradient Indicator"
-msgstr "Anvend flydende farveover&gange (grøn - gul - rød)"
-
-# Opsætning - Indstillinger - Farver - Filvindue
 #: tfrmoptionsfilepanelscolors.cbbuseinactiveselcolor.caption
 msgid "Use Inactive Sel Color"
 msgstr "Brug &inverteret farvevalg for inaktiv"
@@ -6566,10 +6637,9 @@ msgctxt "TFRMOPTIONSFILEPANELSCOLORS.CBUSECURSORBORDER.CAPTION"
 msgid "Cursor border"
 msgstr "Markørgrænser:"
 
-# Opsætning - Indstillinger - Farver - Filvindue
-#: tfrmoptionsfilepanelscolors.dbfreespaceindicator.caption
-msgid "Drive Free Space Indicator"
-msgstr "Bar for brugt/ledig plads"
+#: tfrmoptionsfilepanelscolors.dbcurrentpath.caption
+msgid "Current Path"
+msgstr ""
 
 # Opsætning - Indstillinger - Farver - Filvindue
 #: tfrmoptionsfilepanelscolors.lblbackgroundcolor.caption
@@ -6605,23 +6675,34 @@ msgstr "Valgt inaktiv farve:"
 
 # Opsætning - Indstillinger - Farver - Filvindue
 #: tfrmoptionsfilepanelscolors.lblinactivepanelbrightness.caption
-msgid "&Brightness level of inactive panel"
+#, fuzzy
+#| msgid "&Brightness level of inactive panel"
+msgid "&Brightness level of inactive panel:"
 msgstr "Lysstyrke i det inaktive vindue"
-
-# Opsætning - Indstillinger - Farver - Filvindue
-#: tfrmoptionsfilepanelscolors.lblindbackcolor.caption
-msgid "In&dicator Back Color:"
-msgstr "Farve for le&dig plads:"
-
-# Opsætning - Indstillinger - Farver - Filvindue
-#: tfrmoptionsfilepanelscolors.lblindcolor.caption
-msgid "&Indicator Fore Color:"
-msgstr "Farve for brugt plads:"
 
 # Opsætning - Indstillinger - Farver - Filvindue
 #: tfrmoptionsfilepanelscolors.lblmarkcolor.caption
 msgid "&Mark Color:"
 msgstr "&Valgt farve:"
+
+#: tfrmoptionsfilepanelscolors.lblpathactiveback.caption
+msgctxt "tfrmoptionsfilepanelscolors.lblpathactiveback.caption"
+msgid "Background:"
+msgstr ""
+
+#: tfrmoptionsfilepanelscolors.lblpathactivetext.caption
+#, fuzzy
+msgctxt "tfrmoptionsfilepanelscolors.lblpathactivetext.caption"
+msgid "Text Color:"
+msgstr "&Skriftfarve:"
+
+#: tfrmoptionsfilepanelscolors.lblpathinactiveback.caption
+msgid "Inactive Background:"
+msgstr ""
+
+#: tfrmoptionsfilepanelscolors.lblpathinactivetext.caption
+msgid "Inactive Text Color:"
+msgstr ""
 
 # Opsætning - Indstillinger - Farver - Filvindue
 #: tfrmoptionsfilepanelscolors.lblpreview.caption
@@ -6871,11 +6952,6 @@ msgstr "Tilføj"
 msgctxt "TFRMOPTIONSFILETYPESCOLORS.BTNAPPLYCATEGORY.CAPTION"
 msgid "A&pply"
 msgstr "Udfør"
-
-#: tfrmoptionsfiletypescolors.btncategorycolor.caption
-msgctxt "TFRMOPTIONSFILETYPESCOLORS.BTNCATEGORYCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
 
 #: tfrmoptionsfiletypescolors.btndeletecategory.caption
 msgctxt "TFRMOPTIONSFILETYPESCOLORS.BTNDELETECATEGORY.CAPTION"
@@ -8670,6 +8746,10 @@ msgctxt "tfrmoptionstoolbarbase.misubtoolbarpriorcurrent.caption"
 msgid "just prior current selection"
 msgstr "lige før aktuelle valg"
 
+#: tfrmoptionstoolbarbase.rblinebreak.caption
+msgid "Line break"
+msgstr ""
+
 #: tfrmoptionstoolbarbase.rbseparator.caption
 msgid "Separator"
 msgstr ""
@@ -8951,66 +9031,6 @@ msgctxt "tfrmoptionstreeviewmenucolor.btfont.caption"
 msgid "..."
 msgstr "..."
 
-#: tfrmoptionstreeviewmenucolor.btnbackgroundcolor.caption
-msgctxt "TFRMOPTIONSTREEVIEWMENUCOLOR.BTNBACKGROUNDCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionstreeviewmenucolor.btncursorcolor.caption
-msgctxt "TFRMOPTIONSTREEVIEWMENUCOLOR.BTNCURSORCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionstreeviewmenucolor.btnfoundtextcolor.caption
-msgctxt "TFRMOPTIONSTREEVIEWMENUCOLOR.BTNFOUNDTEXTCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionstreeviewmenucolor.btnfoundtextundercursor.caption
-msgctxt "TFRMOPTIONSTREEVIEWMENUCOLOR.BTNFOUNDTEXTUNDERCURSOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionstreeviewmenucolor.btnnormaltextcolor.caption
-msgctxt "TFRMOPTIONSTREEVIEWMENUCOLOR.BTNNORMALTEXTCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionstreeviewmenucolor.btnnormaltextundercursor.caption
-msgctxt "TFRMOPTIONSTREEVIEWMENUCOLOR.BTNNORMALTEXTUNDERCURSOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionstreeviewmenucolor.btnsecondarytextcolor.caption
-msgctxt "TFRMOPTIONSTREEVIEWMENUCOLOR.BTNSECONDARYTEXTCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionstreeviewmenucolor.btnsecondarytextundercursor.caption
-msgctxt "TFRMOPTIONSTREEVIEWMENUCOLOR.BTNSECONDARYTEXTUNDERCURSOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionstreeviewmenucolor.btnshortcutcolor.caption
-msgctxt "TFRMOPTIONSTREEVIEWMENUCOLOR.BTNSHORTCUTCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionstreeviewmenucolor.btnshortcutundercursor.caption
-msgctxt "TFRMOPTIONSTREEVIEWMENUCOLOR.BTNSHORTCUTUNDERCURSOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionstreeviewmenucolor.btnunselectabletextcolor.caption
-msgctxt "TFRMOPTIONSTREEVIEWMENUCOLOR.BTNUNSELECTABLETEXTCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionstreeviewmenucolor.btnunselectableundercursor.caption
-msgctxt "TFRMOPTIONSTREEVIEWMENUCOLOR.BTNUNSELECTABLEUNDERCURSOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
 # Opsætning - Indstillinger - Layout - Mappeoversigt_layout og farver
 #: tfrmoptionstreeviewmenucolor.cbkusagekeyboardshortcut.caption
 msgid "Use and display keyboard shortcut for choosing items"
@@ -9095,35 +9115,9 @@ msgstr "Ikke-valgbar under markør:"
 msgid "Change color on left and you'll see here a preview of what your Tree View Menus will look likes with this sample."
 msgstr "Når du til venstre ændrer farven, kan du se et preview af, hvordan din mappeoversigt kommer til at se ud i dette eksempel."
 
-#: tfrmoptionsviewer.btnbackviewercolor.caption
-msgctxt "TFRMOPTIONSVIEWER.BTNBACKVIEWERCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-#: tfrmoptionsviewer.btnfontviewercolor.caption
-msgctxt "TFRMOPTIONSVIEWER.BTNFONTVIEWERCOLOR.CAPTION"
-msgid ">>"
-msgstr ">>"
-
-# Opsætning - Indstillinger - Værktøjer - Fremviser
-#: tfrmoptionsviewer.gbviewerbookmode.caption
-msgid "Viewer Book Mode"
-msgstr "Bogvisning"
-
-# Opsætning - Indstillinger - Værktøjer - Fremviser
-#: tfrmoptionsviewer.gbviewerexample.caption
-msgid "Example"
-msgstr "Eksempel"
-
-# Opsætning - Indstillinger - Værktøjer - Fremviser
-#: tfrmoptionsviewer.lblbackgroundcolorviewerbook.caption
-msgid "&Background color in book viewer"
-msgstr "&Baggrundsfarve for bogvisning:"
-
-# Opsætning - Indstillinger - Værktøjer - Fremviser
-#: tfrmoptionsviewer.lblfontcolorviewerbook.caption
-msgid "&Font color in book viewer"
-msgstr "Skrift&farve i bogvisning:"
+#: tfrmoptionsviewer.gbinternalviewer.caption
+msgid "Internal viewer options"
+msgstr ""
 
 # Opsætning - Indstillinger - Værktøjer - Fremviser
 #: tfrmoptionsviewer.lblnumbercolumnsviewer.caption
@@ -9332,23 +9326,23 @@ msgstr "Færre regler"
 msgid "Use &content plugins, combine with:"
 msgstr "Anvend indholds-plugin. Kombiner med:"
 
-#: tfrmsearchplugin.headercontrol.sections[0].text
-msgctxt "TFRMSEARCHPLUGIN.HEADERCONTROL.SECTIONS[0].TEXT"
-msgid "Plugin"
-msgstr "Plugin"
-
-#: tfrmsearchplugin.headercontrol.sections[1].text
-msgctxt "tfrmsearchplugin.headercontrol.sections[1].text"
+#: tfrmsearchplugin.lblfield.caption
+msgctxt "tfrmsearchplugin.lblfield.caption"
 msgid "Field"
 msgstr "Felt"
 
-#: tfrmsearchplugin.headercontrol.sections[2].text
-msgctxt "tfrmsearchplugin.headercontrol.sections[2].text"
+#: tfrmsearchplugin.lbloperator.caption
+msgctxt "tfrmsearchplugin.lbloperator.caption"
 msgid "Operator"
 msgstr "Operator"
 
-#: tfrmsearchplugin.headercontrol.sections[3].text
-msgctxt "tfrmsearchplugin.headercontrol.sections[3].text"
+#: tfrmsearchplugin.lblplugin.caption
+msgctxt "tfrmsearchplugin.lblplugin.caption"
+msgid "Plugin"
+msgstr "Plugin"
+
+#: tfrmsearchplugin.lblvalue.caption
+msgctxt "tfrmsearchplugin.lblvalue.caption"
 msgid "Value"
 msgstr "Værdi"
 
@@ -9540,7 +9534,7 @@ msgctxt "TFRMSETFILEPROPERTIES.CBSGID.CAPTION"
 msgid "SGID"
 msgstr ""
 "SGIDS&GID\n"
-"(Set group id)\n"
+"(Set group id)"
 
 #: tfrmsetfileproperties.cbsticky.caption
 msgctxt "TFRMSETFILEPROPERTIES.CBSTICKY.CAPTION"
@@ -9552,7 +9546,7 @@ msgctxt "TFRMSETFILEPROPERTIES.CBSUID.CAPTION"
 msgid "SUID"
 msgstr ""
 "SUID&SUID\n"
-"(Set user id)\n"
+"(Set user id)"
 
 # Filer - Ændre_attributter
 #: tfrmsetfileproperties.chkarchive.caption
@@ -9561,6 +9555,7 @@ msgstr "&a  Arkiv"
 
 # Filer - Ændre_attributter
 #: tfrmsetfileproperties.chkcreationtime.caption
+msgctxt "tfrmsetfileproperties.chkcreationtime.caption"
 msgid "Created:"
 msgstr "Oprettet:"
 
@@ -9571,11 +9566,13 @@ msgstr "&h  Skjult"
 
 # Filer - Ændre_attributter
 #: tfrmsetfileproperties.chklastaccesstime.caption
+msgctxt "tfrmsetfileproperties.chklastaccesstime.caption"
 msgid "Accessed:"
 msgstr "Åbnet:"
 
 # Filer - Ændre_attributter
 #: tfrmsetfileproperties.chklastwritetime.caption
+msgctxt "tfrmsetfileproperties.chklastwritetime.caption"
 msgid "Modified:"
 msgstr "Ændret:"
 
@@ -10287,6 +10284,18 @@ msgctxt "TFRMVIEWER.ACTFULLSCREEN.CAPTION"
 msgid "Full Screen"
 msgstr "Fuldskærm"
 
+#: tfrmviewer.actgotoline.caption
+#, fuzzy
+msgctxt "tfrmviewer.actgotoline.caption"
+msgid "Goto Line..."
+msgstr "Gå til linje"
+
+#: tfrmviewer.actgotoline.hint
+#, fuzzy
+msgctxt "tfrmviewer.actgotoline.hint"
+msgid "Goto Line"
+msgstr "Gå til linje"
+
 #: tfrmviewer.actimagecenter.caption
 msgid "Center"
 msgstr "Center"
@@ -10445,6 +10454,10 @@ msgstr "Ombryd tekst"
 msgid "Show text c&ursor"
 msgstr ""
 
+#: tfrmviewer.actshowcode.caption
+msgid "Code"
+msgstr ""
+
 # F3 - Vis
 #: tfrmviewer.actshowgraphics.caption
 msgctxt "tfrmviewer.actshowgraphics.caption"
@@ -10476,6 +10489,17 @@ msgstr "Strækker billedet"
 #: tfrmviewer.actstretchonlylarge.caption
 msgid "Stretch only large"
 msgstr "Stræk kun store"
+
+#: tfrmviewer.actundo.caption
+#, fuzzy
+msgctxt "tfrmviewer.actundo.caption"
+msgid "Undo"
+msgstr "Fortryd"
+
+#: tfrmviewer.actundo.hint
+msgctxt "TFRMVIEWER.ACTUNDO.HINT"
+msgid "Undo"
+msgstr "Fortryd"
 
 #: tfrmviewer.actwraptext.caption
 msgid "&Wrap text"
@@ -10558,11 +10582,6 @@ msgctxt "tfrmviewer.btnslideshow.caption"
 msgid "Slide Show"
 msgstr "Slideshow"
 
-#: tfrmviewer.btnundo.hint
-msgctxt "TFRMVIEWER.BTNUNDO.HINT"
-msgid "Undo"
-msgstr "Fortryd"
-
 #: tfrmviewer.caption
 msgctxt "tfrmviewer.caption"
 msgid "Viewer"
@@ -10624,10 +10643,10 @@ msgctxt "TFRMVIEWER.MIVIEW.CAPTION"
 msgid "&View"
 msgstr "&Vis"
 
-#: tfrmviewer.pmiselectall.caption
-msgctxt "TFRMVIEWER.PMISELECTALL.CAPTION"
-msgid "Select All"
-msgstr "Vælg alle"
+#: tfrmviewer.mnuplugins.caption
+msgctxt "tfrmviewer.mnuplugins.caption"
+msgid "Plugins"
+msgstr "Plugins"
 
 #: tfrmviewoperations.btnstartpause.caption
 msgctxt "tfrmviewoperations.btnstartpause.caption"
@@ -10883,18 +10902,19 @@ msgid "Orientation"
 msgstr "Retning"
 
 #: ulng.msgtrytolocatecrcfile
+#, object-pascal-format
 msgid ""
 "This file cannot be found and could help to validate final combination of files:\n"
 "%s\n"
 "\n"
 "Could you make it available and press \"OK\" when ready,\n"
-"or press \"CANCEL\" to continue without it?\n"
+"or press \"CANCEL\" to continue without it?"
 msgstr ""
 "Filen kan ikke findes men den kunne hjælpe med at validere den endelige kombination af filer:\n"
 "%s\n"
 "\n"
 "Find den venligst og klik \"OK\" når du er klar,\n"
-"eller klik \"Annuller\" for at fortsætte uden filen?\n"
+"eller klik \"Annuller\" for at fortsætte uden filen?"
 
 #: ulng.rsabbrevdisplaydir
 msgid "<DIR>"
@@ -10937,6 +10957,7 @@ msgid "Read error:"
 msgstr "Læsefejl"
 
 #: ulng.rschecksumverifysuccess
+msgctxt "ulng.rschecksumverifysuccess"
 msgid "Success:"
 msgstr "Lykkedes:"
 
@@ -11033,8 +11054,17 @@ msgid "Confirming command line and parameters"
 msgstr "Bekræfter kommandolinje og parametre"
 
 #: ulng.rscopynametemplate
+#, object-pascal-format
 msgid "Copy (%d) %s"
 msgstr "Kopier (%d) %s"
+
+#: ulng.rsdarkmode
+msgid "Dark mode"
+msgstr ""
+
+#: ulng.rsdarkmodeoptions
+msgid "Auto;Enabled;Disabled"
+msgstr ""
 
 #: ulng.rsdefaultimporteddctoolbarhint
 msgid "Imported DC toolbar"
@@ -11130,7 +11160,7 @@ msgstr ""
 #: ulng.rsdifftextidenticalnotmatch
 msgid ""
 "The text is identical, but the files do not match!\n"
-"The following differences were found:\n"
+"The following differences were found:"
 msgstr ""
 
 #: ulng.rsdlgbuttonabort
@@ -11282,16 +11312,23 @@ msgid "Queue"
 msgstr "Kø"
 
 #: ulng.rsdlgspeed
+#, object-pascal-format
 msgid "Speed %s/s"
 msgstr "Hastighed %s/s"
 
 #: ulng.rsdlgspeedtime
+#, object-pascal-format
 msgid "Speed %s/s, time remaining %s"
 msgstr "Hastighed %s/s, resterende tid %s"
 
 #: ulng.rsdraganddroptextformat
 msgid "Rich Text Format;HTML Format;Unicode Format;Simple Text Format"
 msgstr "Rich Text-format;HTML-fFormat;Unicode-format;Simple Text-format"
+
+# Opsætning - Indstillinger - Farver - Filvindue
+#: ulng.rsdrivefreespaceindicator
+msgid "Drive Free Space Indicator"
+msgstr "Bar for brugt/ledig plads"
 
 #: ulng.rsdrivenolabel
 msgid "<no label>"
@@ -11331,6 +11368,7 @@ msgid "&Backward"
 msgstr "Til&bage"
 
 #: ulng.rseditsearchcaption
+msgctxt "ulng.rseditsearchcaption"
 msgid "Search"
 msgstr "Søg"
 
@@ -11371,10 +11409,12 @@ msgid "Execute via terminal and stay open"
 msgstr "Udfør i terminal og forbliv åben"
 
 #: ulng.rsextsclosedbracketnofound
+#, object-pascal-format
 msgid "\"]\" not found in line %s"
 msgstr "\"]\" blev ikke fundet i linjen %s"
 
 #: ulng.rsextscommandwithnoext
+#, object-pascal-format
 msgid "No extension defined before command \"%s\". It will be ignored."
 msgstr "Ingen udvidelse defineret før kommandoen \"%s\". Det ignoreres"
 
@@ -11470,6 +11510,7 @@ msgid "Define template"
 msgstr "Definer valg"
 
 #: ulng.rsfinddepth
+#, object-pascal-format
 msgid "%s level(s)"
 msgstr "%s niveau(er)"
 
@@ -11482,10 +11523,12 @@ msgid "current dir only"
 msgstr "Kun aktuelle mappe"
 
 #: ulng.rsfinddirnoex
+#, object-pascal-format
 msgid "Directory %s does not exist!"
 msgstr "Mappen %s findes ikke!"
 
 #: ulng.rsfindfound
+#, object-pascal-format
 msgid "Found: %d"
 msgstr "Fundet: %d"
 
@@ -11498,6 +11541,7 @@ msgid "Template name:"
 msgstr "Navn på skabelon:"
 
 #: ulng.rsfindscanned
+#, object-pascal-format
 msgid "Scanned: %d"
 msgstr "Skannet: %d"
 
@@ -11565,10 +11609,12 @@ msgid "Viewer&Book Font"
 msgstr "&Bogviserens skrifttype:"
 
 #: ulng.rsfreemsg
+#, object-pascal-format
 msgid "%s of %s free"
 msgstr "Ledig plads: %sB. Kapacitet:  %sB"
 
 #: ulng.rsfreemsgshort
+#, object-pascal-format
 msgid "%s free"
 msgstr "%sB ledige"
 
@@ -11660,11 +11706,11 @@ msgstr "ingen;Navn, a-z;Navn, z-a;Ext, a-z;Ext, z-a;Størrelse 9-0;Størrelse 0-
 msgid ""
 "Warning! When restoring a .hotlist backup file, this will erase existing list to replace by the imported one.\n"
 "\n"
-"Are you sure you want to proceed?\n"
+"Are you sure you want to proceed?"
 msgstr ""
 "Advarsel! Hvis en .hotlist fil gendannes, overskrives den eksisterende liste af den importerede fil.\n"
 "\n"
-"Vil du fortsætte?\n"
+"Vil du fortsætte?"
 
 # Opsætning - Indstillinger - Taster - Genvejstaster - Kategorier:
 #: ulng.rshotkeycategorycopymovedialog
@@ -11718,20 +11764,22 @@ msgstr "Fremviser"
 #: ulng.rshotkeyfilealreadyexists
 msgid ""
 "A setup with that name already exists.\n"
-"Do you want to overwrite it?\n"
+"Do you want to overwrite it?"
 msgstr ""
 "En genvej med det navn findes allerede.\n"
-"Vil du overskrive den?\n"
+"Vil du overskrive den?"
 
 #: ulng.rshotkeyfileconfirmdefault
 msgid "Are you sure you want to restore default?"
 msgstr "Er du sikker på, at du vil gendanne standardindstillingerne?"
 
 #: ulng.rshotkeyfileconfirmerasure
+#, object-pascal-format
 msgid "Are you sure you want to erase setup \"%s\"?"
 msgstr "Er du sikker på, at du vil slette opsætningen \"%s\"?"
 
 #: ulng.rshotkeyfilecopyof
+#, object-pascal-format
 msgid "Copy of %s"
 msgstr "Kopi af %s"
 
@@ -11748,12 +11796,13 @@ msgid "New name"
 msgstr "Nyt navn"
 
 #: ulng.rshotkeyfilesavemodified
+#, object-pascal-format
 msgid ""
 "\"%s\" setup has been modified.\n"
-"Do you want to save it now?\n"
+"Do you want to save it now?"
 msgstr ""
 "\"%s\" er blevet ændret.\n"
-"Vil du gemme nu?\n"
+"Vil du gemme nu?"
 
 # Opsætning - Indstillinger - Genvejstaster - Tilføj_genvejstast
 #: ulng.rshotkeynoscenter
@@ -11829,8 +11878,218 @@ msgstr "Indstillinger for kolonner"
 msgid "Enter new custom columns name"
 msgstr "Indtast navn til den tilpassede kolonne"
 
-#: ulng.rsmenumacosservices
-msgid "Services"
+#: ulng.rsmenumacosaddfindertag
+#, object-pascal-format
+msgid "Add \"%s\""
+msgstr ""
+
+#: ulng.rsmenumacoseditfindertags
+msgctxt "ulng.rsmenumacoseditfindertags"
+msgid "Edit Finder Tags..."
+msgstr ""
+
+#: ulng.rsmenumacosgrantpermissiontosupportfindertags
+msgid "Grant \"Full Disk Access\" permission to support Finder Tags..."
+msgstr ""
+
+#: ulng.rsmenumacosremovefindertag
+#, object-pascal-format
+msgid "Remove \"%s\""
+msgstr ""
+
+#: ulng.rsmenumacosshare
+msgid "Share..."
+msgstr ""
+
+#: ulng.rsmfstbiairdroptips
+msgctxt "ulng.rsmfstbiairdroptips"
+msgid "AirDrop"
+msgstr ""
+
+#: ulng.rsmfstbiairdroptitle
+msgctxt "ulng.rsmfstbiairdroptitle"
+msgid "AirDrop"
+msgstr ""
+
+#: ulng.rsmfstbicommandmenudirectoryhotlist
+#, fuzzy
+msgctxt "ulng.rsmfstbicommandmenudirectoryhotlist"
+msgid "Directory Hotlist"
+msgstr "Favoritmapper"
+
+#: ulng.rsmfstbicommandmenufavoritetabs
+#, fuzzy
+msgctxt "ulng.rsmfstbicommandmenufavoritetabs"
+msgid "Favorite Tabs"
+msgstr "Favoritfaneblade"
+
+#: ulng.rsmfstbicommandmenuquicklook
+msgid "macOS QuickLook"
+msgstr ""
+
+#: ulng.rsmfstbicommandtitle
+#, fuzzy
+msgctxt "ulng.rsmfstbicommandtitle"
+msgid "Command"
+msgstr "Kommando..."
+
+#: ulng.rsmfstbicomparetips
+msgid "Compare by Contents..."
+msgstr ""
+
+#: ulng.rsmfstbicomparetitle
+#, fuzzy
+msgctxt "ulng.rsmfstbicomparetitle"
+msgid "Compare"
+msgstr "&Sammenlign"
+
+#: ulng.rsmfstbieditfindertagtips
+msgctxt "ulng.rsmfstbieditfindertagtips"
+msgid "Edit Finder Tags..."
+msgstr ""
+
+#: ulng.rsmfstbieditfindertagtitle
+msgid "EditTag"
+msgstr ""
+
+#: ulng.rsmfstbiedittips
+msgid "Edit..."
+msgstr ""
+
+#: ulng.rsmfstbiedittitle
+#, fuzzy
+msgctxt "ulng.rsmfstbiedittitle"
+msgid "Edit"
+msgstr "Rediger"
+
+#: ulng.rsmfstbifinderrevealtips
+msgid "Reveal in Finder"
+msgstr ""
+
+#: ulng.rsmfstbifinderrevealtitle
+msgid "Finder"
+msgstr ""
+
+#: ulng.rsmfstbigotips
+msgctxt "ulng.rsmfstbigotips"
+msgid "Go"
+msgstr ""
+
+#: ulng.rsmfstbigotitle
+msgctxt "ulng.rsmfstbigotitle"
+msgid "Go"
+msgstr ""
+
+#: ulng.rsmfstbihorzsplittips
+msgid "Toggle Horizontal Split Mode"
+msgstr ""
+
+#: ulng.rsmfstbihorzsplittitle
+msgid "HorzSplit"
+msgstr ""
+
+#: ulng.rsmfstbiprivilegetips
+msgid "As a file manager, Double Command requires full disk access permissions. Clicking this button will pop up the macOS system settings page. Please add \"Double Commander.app\" to the \"Full Disk Access\" list to complete the authorization."
+msgstr ""
+
+#: ulng.rsmfstbiprivilegetitle
+msgid "Privilege"
+msgstr ""
+
+#: ulng.rsmfstbiquicklooktips
+msgid "macOS Quick Look Panel"
+msgstr ""
+
+#: ulng.rsmfstbiquicklooktitle
+msgid "QuickLook"
+msgstr ""
+
+#: ulng.rsmfstbirefreshtips
+msgid "Refresh File List"
+msgstr ""
+
+#: ulng.rsmfstbirefreshtitle
+msgid "Refresh"
+msgstr ""
+
+#: ulng.rsmfstbisearchcombinedtags
+msgid "Search for combined tags..."
+msgstr ""
+
+#: ulng.rsmfstbisearchtips
+msgid "Search Files..."
+msgstr ""
+
+#: ulng.rsmfstbisearchtitle
+#, fuzzy
+msgctxt "ulng.rsmfstbisearchtitle"
+msgid "Search"
+msgstr "Søg"
+
+#: ulng.rsmfstbisharetitle
+msgid "Share"
+msgstr ""
+
+#: ulng.rsmfstbishowbrieftitle
+msgid "as Brief"
+msgstr ""
+
+#: ulng.rsmfstbishowfulltitle
+msgid "as Full"
+msgstr ""
+
+#: ulng.rsmfstbishowinfotips
+msgid "Show Info in Finder"
+msgstr ""
+
+#: ulng.rsmfstbishowinfotitle
+msgid "ShowInfo"
+msgstr ""
+
+#: ulng.rsmfstbishowmodetips
+msgid "Show as Brief, Full or Thumbnails"
+msgstr ""
+
+#: ulng.rsmfstbishowmodetitle
+msgid "ShowMode"
+msgstr ""
+
+#: ulng.rsmfstbishowthumbnailstitle
+msgid "as Thumbnails"
+msgstr ""
+
+#: ulng.rsmfstbiswappanelstips
+msgid "Swap Panels"
+msgstr ""
+
+#: ulng.rsmfstbiswappanelstitle
+msgid "SwapPanels"
+msgstr ""
+
+#: ulng.rsmfstbisynctips
+msgid "Synchronize Dirs..."
+msgstr ""
+
+#: ulng.rsmfstbisynctitle
+msgid "Sync"
+msgstr ""
+
+#: ulng.rsmfstbiterminaltips
+msgid "Open in Terminal"
+msgstr ""
+
+#: ulng.rsmfstbiterminaltitle
+#, fuzzy
+msgctxt "ulng.rsmfstbiterminaltitle"
+msgid "Terminal"
+msgstr "Terminal"
+
+#: ulng.rsmfstbitreeviewtips
+msgid "Show Tree View Panel"
+msgstr ""
+
+#: ulng.rsmfstbitreeviewtitle
+msgid "TreeView"
 msgstr ""
 
 #: ulng.rsmnuactions
@@ -11869,11 +12128,6 @@ msgstr "Skub ud"
 msgid "Extract here..."
 msgstr "Udpak her..."
 
-# Netværk
-#: ulng.rsmnumapnetworkdrive
-msgid "Map Network Drive..."
-msgstr "Opret net&værksdrev..."
-
 #: ulng.rsmnumount
 msgid "Mount"
 msgstr "Mount"
@@ -11882,6 +12136,10 @@ msgstr "Mount"
 msgctxt "ulng.rsmnunew"
 msgid "New"
 msgstr "Ny"
+
+#: ulng.rsmnunewwindow
+msgid "New Window"
+msgstr ""
 
 #: ulng.rsmnunomedia
 msgid "No media available"
@@ -11934,6 +12192,7 @@ msgid "All Double Commander internal commands"
 msgstr "Alle Double Commanders interne kommandoer"
 
 #: ulng.rsmsgapplicationname
+#, object-pascal-format
 msgid "Description: %s"
 msgstr "Beskrivelse: %s"
 
@@ -11946,38 +12205,44 @@ msgid "Do you want to enclose between quotes?"
 msgstr "Vil du indføje mellem anførselstegn?"
 
 #: ulng.rsmsgbadcrc32
+#, object-pascal-format
 msgid ""
 "Bad CRC32 for resulting file:\n"
 "\"%s\"\n"
 "\n"
-"Do you want to keep the resulting corrupted file anyway?\n"
+"Do you want to keep the resulting corrupted file anyway?"
 msgstr ""
 "Fejl i CRC32 for fil:\n"
 "\"%s\"\n"
 "\n"
-"Vil du beholde den beskadigede fil?\n"
+"Vil du beholde den beskadigede fil?"
 
 #: ulng.rsmsgcanceloperation
 msgid "Are you sure that you want to cancel this operation?"
 msgstr ""
 
 #: ulng.rsmsgcannotcopymoveitself
+#, object-pascal-format
 msgid "You can not copy/move a file \"%s\" to itself!"
 msgstr "Du kan ikke kopiere/flytte filen \"%s\" til sig selv!"
 
 #: ulng.rsmsgcannotcopyspecialfile
+#, object-pascal-format
 msgid "Cannot copy special file %s"
 msgstr ""
 
 #: ulng.rsmsgcannotdeletedirectory
+#, object-pascal-format
 msgid "Cannot delete directory %s"
 msgstr "Kan ikke slette mappen %s"
 
 #: ulng.rsmsgcannotoverwritedirectory
+#, object-pascal-format
 msgid "Cannot overwrite directory \"%s\" with non-directory \"%s\""
 msgstr "Kan ikke overskrive mappen \"%s\" med \"%s\", der ikke er en mappe"
 
 #: ulng.rsmsgchdirfailed
+#, object-pascal-format
 msgid "Change current directory to \"%s\" failed!"
 msgstr "Ændre arbejdsmappe [ChDir] til \"%s\" mislykkedes!"
 
@@ -11986,6 +12251,7 @@ msgid "Remove all inactive tabs?"
 msgstr "Luk alle inaktive faneblade?"
 
 #: ulng.rsmsgcloselockedtab
+#, object-pascal-format
 msgid "This tab (%s) is locked! Close anyway?"
 msgstr "Fanebladet (%s) er låst! Luk alligevel?"
 
@@ -11993,11 +12259,17 @@ msgstr "Fanebladet (%s) er låst! Luk alligevel?"
 msgid "Confirmation of parameter"
 msgstr "Bekræftelse af parameter"
 
+#: ulng.rsmsgcommandnotfound
+#, object-pascal-format
+msgid "Command not found! (%s)"
+msgstr ""
+
 #: ulng.rsmsgconfirmquit
 msgid "Are you sure you want to quit?"
 msgstr "Er du sikker på at ville afslutte?"
 
 #: ulng.rsmsgcopybackward
+#, object-pascal-format
 msgid "The file %s has changed. Do you want to copy it backward?"
 msgstr "Filen %s er ændret. Ønsker du at kopiere den tilbage?"
 
@@ -12006,15 +12278,18 @@ msgid "Could not copy backward - do you want to keep the changed file?"
 msgstr "Kunne ikke kopiere tilbage - vil du beholde den ændrede fil?"
 
 #: ulng.rsmsgcpfldr
+#, object-pascal-format
 msgid "Copy %d selected files/directories?"
 msgstr "Kopier %d valgte filer/mapper til:"
 
 # F5
 #: ulng.rsmsgcpsel
+#, object-pascal-format
 msgid "Copy selected \"%s\"?"
 msgstr "Kopier \"%s\" til:"
 
 #: ulng.rsmsgcreateanewfiletype
+#, object-pascal-format
 msgid "< Create a new file type \"%s files\" >"
 msgstr "< Opret en ny filtype \"%s-filer\" >"
 
@@ -12032,22 +12307,27 @@ msgid "Delete the partially copied file ?"
 msgstr "Slet den delvist kopierede fil ?"
 
 #: ulng.rsmsgdelfldr
+#, object-pascal-format
 msgid "Delete %d selected files/directories?"
 msgstr "Er du sikker på, at du vil slette de %d valgte filer/mapper?"
 
 #: ulng.rsmsgdelfldrt
+#, object-pascal-format
 msgid "Delete %d selected files/directories into trash can?"
 msgstr "Vil du flytte disse %d elementer til Papirkurv?"
 
 #: ulng.rsmsgdelsel
+#, object-pascal-format
 msgid "Delete selected \"%s\"?"
 msgstr "Er du sikker på, at du vil slette den valgte fil \"%s\" ?"
 
 #: ulng.rsmsgdelselt
+#, object-pascal-format
 msgid "Delete selected \"%s\" into trash can?"
 msgstr "Vil du flytte \"%s\" til Papirkurv?"
 
 #: ulng.rsmsgdeltotrashforce
+#, object-pascal-format
 msgid "Can not delete \"%s\" to trash! Delete directly?"
 msgstr "Kan ikke flytte \"%s\" til Papirkurv! Slet direkte?"
 
@@ -12069,6 +12349,7 @@ msgid "Enter name:"
 msgstr "Indtast navn:"
 
 #: ulng.rsmsgenternewfiletypename
+#, object-pascal-format
 msgid "Enter name of new file type to create for extension \"%s\""
 msgstr "Indtast navnet på den nye filtype for at danne filendelsen \"%s\""
 
@@ -12081,30 +12362,37 @@ msgid "Data is bad"
 msgstr "Datafejl"
 
 #: ulng.rsmsgerrcannotconnect
+#, object-pascal-format
 msgid "Can not connect to server: \"%s\""
 msgstr "Kan ikke forbinde til server: \"%s\""
 
 #: ulng.rsmsgerrcannotcopyfile
+#, object-pascal-format
 msgid "Cannot copy file %s to %s"
 msgstr "Kan ikke kopiere fil %s til %s"
 
 #: ulng.rsmsgerrcannotmovedirectory
+#, object-pascal-format
 msgid "Cannot move directory %s"
 msgstr ""
 
 #: ulng.rsmsgerrcannotmovefile
+#, object-pascal-format
 msgid "Cannot move file %s"
 msgstr ""
 
 #: ulng.rsmsgerrcreatefiledirectoryexists
+#, object-pascal-format
 msgid "There already exists a directory named \"%s\"."
 msgstr "Der findes allerede en mappe med navnet \"%s\"."
 
 #: ulng.rsmsgerrdatenotsupported
+#, object-pascal-format
 msgid "Date %s is not supported"
 msgstr "Datoen %s understøttes ikke"
 
 #: ulng.rsmsgerrdirexists
+#, object-pascal-format
 msgid "Directory %s exists!"
 msgstr "Fejl: Mappen \"%s\" eksisterer allerede! Angiv et andet navn."
 
@@ -12137,6 +12425,7 @@ msgid "Error writing to file"
 msgstr "Kunne ikke skrive til fil"
 
 #: ulng.rsmsgerrforcedir
+#, object-pascal-format
 msgid "Can not create directory %s!"
 msgstr "Kan ikke oprette mappe %s!"
 
@@ -12169,6 +12458,7 @@ msgid "Syntax error in regular expression!"
 msgstr "Syntaksfejl i regulære udtryk!"
 
 #: ulng.rsmsgerrrename
+#, object-pascal-format
 msgid "Cannot rename file %s to %s"
 msgstr "Kan ikke omdøbe fil %s til %s"
 
@@ -12181,22 +12471,27 @@ msgid "Cannot save file"
 msgstr "Kan ikke gemme fil"
 
 #: ulng.rsmsgerrsetattribute
+#, object-pascal-format
 msgid "Can not set attributes for \"%s\""
 msgstr "Kan ikke indstille attributter for \"%s\""
 
 #: ulng.rsmsgerrsetdatetime
+#, object-pascal-format
 msgid "Can not set date/time for \"%s\""
 msgstr "Kan ikke indstille dato/tid for \"%s\""
 
 #: ulng.rsmsgerrsetownership
+#, object-pascal-format
 msgid "Can not set owner/group for \"%s\""
 msgstr "Kan ikke oprette ejer/gruppe for \"%s\""
 
 #: ulng.rsmsgerrsetpermissions
+#, object-pascal-format
 msgid "Can not set permissions for \"%s\""
 msgstr "Kan ikke indstille tilladelser for \"%s\""
 
 #: ulng.rsmsgerrsetxattribute
+#, object-pascal-format
 msgid "Can not set extended attributes for \"%s\""
 msgstr ""
 
@@ -12213,6 +12508,7 @@ msgid "Archive format unknown"
 msgstr "Arkivformat ukendt"
 
 #: ulng.rsmsgexecutablepath
+#, object-pascal-format
 msgid "Executable: %s"
 msgstr "Eksekverbare: %s"
 
@@ -12237,6 +12533,7 @@ msgid "Saving a new Favorite Tabs entry"
 msgstr "Gemmer navnet på nyt Favoritfaneblad"
 
 #: ulng.rsmsgfavoritetabsexportedsuccessfully
+#, object-pascal-format
 msgid "Number of Favorite Tabs exported successfully: %d on %d"
 msgstr "Antal korrekt eksporterede Favoritfaneblade: %d af %d"
 
@@ -12246,6 +12543,7 @@ msgid "Default extra setting for save dir history for new Favorite Tabs:"
 msgstr "Skal historikken, som standard for nye Favoritfaneblade, gemmes:"
 
 #: ulng.rsmsgfavoritetabsimportedsuccessfully
+#, object-pascal-format
 msgid "Number of file(s) imported successfully: %d on %d"
 msgstr "Antal korrekt importerede fil(er): %d af %d"
 
@@ -12273,6 +12571,7 @@ msgid "Submenu name"
 msgstr "Undermenus navn"
 
 #: ulng.rsmsgfavoritetabsthiswillloadfavtabs
+#, object-pascal-format
 msgid "This will load the Favorite Tabs: \"%s\""
 msgstr "Det vil indlæse Favoritfanebladet: \"%s\""
 
@@ -12281,12 +12580,14 @@ msgid "Save current tabs over existing Favorite Tabs entry"
 msgstr "Gem aktuelt faneblad og overskriv eksisterende Favoritfaneblad"
 
 #: ulng.rsmsgfilechangedsave
+#, object-pascal-format
 msgid "File %s changed, save?"
 msgstr ""
 "Filen \"%s\" er ændret.\n"
-"Vil du gemme?\n"
+"Vil du gemme?"
 
 #: ulng.rsmsgfileexistsfileinfo
+#, object-pascal-format
 msgid "%s bytes, %s"
 msgstr "%s bytes, %s"
 
@@ -12295,16 +12596,18 @@ msgid "Overwrite:"
 msgstr "Overskriv:"
 
 #: ulng.rsmsgfileexistsrwrt
+#, object-pascal-format
 msgid "File %s exists, overwrite?"
 msgstr ""
 "Filen \"%s\" findes allerede.\n"
-"Vil du overskrive?\n"
+"Vil du overskrive?"
 
 #: ulng.rsmsgfileexistswithfile
 msgid "With file:"
 msgstr "Med fil:"
 
 #: ulng.rsmsgfilenotfound
+#, object-pascal-format
 msgid "File \"%s\" not found."
 msgstr "Filen \"\"%s\" ikke funde"
 
@@ -12317,16 +12620,18 @@ msgid "Some file operations have not yet finished. Closing Double Commander may 
 msgstr "Der er uafsluttede filhandlinger. Lukkes Double Commander kan det medføre tab af data."
 
 #: ulng.rsmsgfilepathovermaxpath
+#, object-pascal-format
 msgid ""
 "The target name length (%d) is more than %d characters!\n"
 "%s\n"
-"Most programs will not be able to access a file/directory with such a long name!\n"
+"Most programs will not be able to access a file/directory with such a long name!"
 msgstr ""
 "Navnets længde (%d) er mere end %d tegn\n"
 "%s\n"
-"De fleste programmer vil ikke kunne få adgang til en fil/mappe med et så langt navn!\n"
+"De fleste programmer vil ikke kunne få adgang til en fil/mappe med et så langt navn!"
 
 #: ulng.rsmsgfilereadonly
+#, object-pascal-format
 msgid "File %s is marked as read-only/hidden/system. Delete it?"
 msgstr "Filen %s er markeret som skrivebeskyttet. Vil du slette den?"
 
@@ -12335,16 +12640,19 @@ msgid "Are you sure you want to reload the current file and lose the changes?"
 msgstr "Er du sikker på, at du vil genindlæse filen og miste ændringerne?"
 
 #: ulng.rsmsgfilesizetoobig
+#, object-pascal-format
 msgid "The file size of \"%s\" is too big for destination file system!"
 msgstr "Størrelsen på filen \"%s\" er for stor til destinationens filsystem!"
 
 #: ulng.rsmsgfolderexistsrwrt
+#, object-pascal-format
 msgid "Folder %s exists, merge?"
 msgstr ""
 "Mappen %s eksisterer.\n"
-"Vil du overskrive?\n"
+"Vil du overskrive?"
 
 #: ulng.rsmsgfollowsymlink
+#, object-pascal-format
 msgid "Follow symlink \"%s\"?"
 msgstr "Følg symlink \"%s\"?"
 
@@ -12353,6 +12661,7 @@ msgid "Select the text format to import"
 msgstr "Vælg tekstformatet som skal importeres"
 
 #: ulng.rsmsghotdiraddselecteddirectories
+#, object-pascal-format
 msgid "Add %d selected dirs"
 msgstr "Tilføj %d valgte mapper"
 
@@ -12445,6 +12754,7 @@ msgid "Hotdir name"
 msgstr "Favoritmappens navn"
 
 #: ulng.rsmsghotdirnbnewentries
+#, object-pascal-format
 msgid "Number of new entries: %d"
 msgstr "Antal nye poster: %d"
 
@@ -12515,49 +12825,53 @@ msgid "Some functions to select appropriate path relative, absolute, windows spe
 msgstr "Nogle funktioner til at vælge egnet sti - relative, absolutte, særlige windowsmapper etc."
 
 #: ulng.rsmsghotdirtotalbackuped
+#, object-pascal-format
 msgid ""
 "Total entries saved: %d\n"
 "\n"
-"Backup filename: %s\n"
+"Backup filename: %s"
 msgstr ""
 "Samlede antal gemte posteringer: %d\n"
-"Backuppens filnavn: %s\n"
+"Backuppens filnavn: %s"
 
 #: ulng.rsmsghotdirtotalexported
 msgid "Total entries exported: "
 msgstr "Samlede antal eksportede posteringer: "
 
 #: ulng.rsmsghotdirwhattodelete
+#, object-pascal-format
 msgid ""
 "Do you want to delete all elements inside the sub-menu [%s]?\n"
-"Answering NO will delete only menu delimiters but will keep element inside sub-menu.\n"
+"Answering NO will delete only menu delimiters but will keep element inside sub-menu."
 msgstr ""
 "Vil du slette alle elementer i undermenu [%s]?\n"
-"Svarer du NEJ, slettes kun menuskilletegn, mens elementer inde i undermenuen bevares.\n"
+"Svarer du NEJ, slettes kun menuskilletegn, mens elementer inde i undermenuen bevares."
 
 #: ulng.rsmsghotdirwheretosave
 msgid "Enter location and filename where to save a Directory Hotlist file"
 msgstr "Indtast placering og filnavn, for hvor Favoritmappe skal gemmes"
 
 #: ulng.rsmsgincorrectfilelength
+#, object-pascal-format
 msgid "Incorrect resulting filelength for file : \"%s\""
 msgstr "Ugyldig fillængde for fil : \"%s\""
 
 #: ulng.rsmsginsertnextdisk
+#, object-pascal-format
 msgid ""
 "Please insert next disk or something similar.\n"
 "\n"
 "It is to allow writing this file:\n"
 "\"%s\"\n"
 "\n"
-"Number of bytes still to write: %d\n"
+"Number of bytes still to write: %d"
 msgstr ""
 "Indsæt venligst næste disk eller noget lignende.\n"
 "\n"
 "Således det er muligt at skrive denne fil:\n"
 "\"%s\"\n"
 "\n"
-"Antal bytes som mangler at blive skrevet: %d\n"
+"Antal bytes som mangler at blive skrevet: %d"
 
 #: ulng.rsmsginvalidcommandline
 msgid "Error in command line"
@@ -12572,6 +12886,7 @@ msgid "Invalid format of configuration file"
 msgstr "Ugyldigt format af konfigurationsfilen"
 
 #: ulng.rsmsginvalidhexnumber
+#, object-pascal-format
 msgid "Invalid hexadecimal number: \"%s\""
 msgstr "Ugyldigt hexadecimaltal: \"%s\""
 
@@ -12580,6 +12895,7 @@ msgid "Invalid path"
 msgstr "Ugyldig sti"
 
 #: ulng.rsmsginvalidpathlong
+#, object-pascal-format
 msgid "Path %s contains forbidden characters."
 msgstr "Stien %s indeholder ugyldige tegn."
 
@@ -12588,6 +12904,7 @@ msgid "This is not a valid plugin!"
 msgstr "Dette er ikke et gyldigt plugin!"
 
 #: ulng.rsmsginvalidpluginarchitecture
+#, object-pascal-format
 msgid "This plugin is built for Double Commander for %s.%sIt can not work with Double Commander for %s!"
 msgstr "Dette plugin er lavet til Double Commander for %s.%sDet virker ikke sammen med Double Commander for %s!"
 
@@ -12612,10 +12929,12 @@ msgid "Locate TC executable file (totalcmd.exe or totalcmd64.exe)"
 msgstr "Find TC-exe filen (totalcmd.exe or totalcmd64.exe)"
 
 #: ulng.rsmsglogcopy
+#, object-pascal-format
 msgid "Copy file %s"
 msgstr "Kopier fil %s"
 
 #: ulng.rsmsglogdelete
+#, object-pascal-format
 msgid "Delete file %s"
 msgstr "Slet fil %s"
 
@@ -12632,6 +12951,7 @@ msgid "Result external"
 msgstr "Eksternt resultat"
 
 #: ulng.rsmsglogextract
+#, object-pascal-format
 msgid "Extract file %s"
 msgstr "Udpak fil %s"
 
@@ -12640,18 +12960,22 @@ msgid "Info: "
 msgstr "Info:"
 
 #: ulng.rsmsgloglink
+#, object-pascal-format
 msgid "Create link %s"
 msgstr "Dan link %s"
 
 #: ulng.rsmsglogmkdir
+#, object-pascal-format
 msgid "Create directory %s"
 msgstr "Opret mappe %s"
 
 #: ulng.rsmsglogmove
+#, object-pascal-format
 msgid "Move file %s"
 msgstr "Flyt fil %s"
 
 #: ulng.rsmsglogpack
+#, object-pascal-format
 msgid "Pack to file %s"
 msgstr "Pak til fil %s"
 
@@ -12664,6 +12988,7 @@ msgid "Program start"
 msgstr "Programstart"
 
 #: ulng.rsmsglogrmdir
+#, object-pascal-format
 msgid "Remove directory %s"
 msgstr "Fjern mappe %s"
 
@@ -12672,18 +12997,22 @@ msgid "Done: "
 msgstr "Færdig: "
 
 #: ulng.rsmsglogsymlink
+#, object-pascal-format
 msgid "Create symlink %s"
 msgstr "Dan symlink %s"
 
 #: ulng.rsmsglogtest
+#, object-pascal-format
 msgid "Test file integrity %s"
 msgstr "Kontroller filintegritet %s"
 
 #: ulng.rsmsglogwipe
+#, object-pascal-format
 msgid "Wipe file %s"
 msgstr "Sikker sletning af fil %s"
 
 #: ulng.rsmsglogwipedir
+#, object-pascal-format
 msgid "Wipe directory %s"
 msgstr "Sikker sletning af mappe %s"
 
@@ -12715,15 +13044,16 @@ msgstr "Ingen filer valgt"
 msgid "No enough free space on target drive, Continue?"
 msgstr ""
 "Ikke nok ledig plads på destinationsdrevet.\n"
-" Vil du fortsætte?\n"
+" Vil du fortsætte?"
 
 #: ulng.rsmsgnofreespaceretry
 msgid "No enough free space on target drive, Retry?"
 msgstr ""
 "Ikke nok ledig plads på destinationsdrevet.\n"
-" Vil du forsøge igen?\n"
+" Vil du forsøge igen?"
 
 #: ulng.rsmsgnotdelete
+#, object-pascal-format
 msgid "Can not delete file %s"
 msgstr "Kan ikke slette fil %s"
 
@@ -12767,24 +13097,29 @@ msgid "Please re-enter the password for verification:"
 msgstr "For kontrol af adgangskoden, indtast den venligst igen:"
 
 #: ulng.rsmsgpopuphotdelete
+#, object-pascal-format
 msgid "&Delete %s"
 msgstr "&Fjern %s"
 
 #: ulng.rsmsgpresetalreadyexists
+#, object-pascal-format
 msgid "Preset \"%s\" already exists. Overwrite?"
 msgstr ""
 "Forudindstilling \"%s\" findes allerede.\n"
-" Vil du overskrive?\n"
+" Vil du overskrive?"
 
 #: ulng.rsmsgpresetconfigdelete
+#, object-pascal-format
 msgid "Are you sure you want to delete preset \"%s\"?"
 msgstr ""
 
 #: ulng.rsmsgproblemexecutingcommand
+#, object-pascal-format
 msgid "Problem executing command (%s)"
 msgstr "Problem med udførelse af kommando (%s)"
 
 #: ulng.rsmsgprocessid
+#, object-pascal-format
 msgid "PID: %d"
 msgstr "PID: %d"
 
@@ -12807,10 +13142,12 @@ msgid "Enter new name for this menu"
 msgstr "Indtast nyt navn for denne menu"
 
 #: ulng.rsmsgrenfldr
+#, object-pascal-format
 msgid "Rename/move %d selected files/directories?"
 msgstr "Omdøbe/flytte %d valgte filer/mapper?"
 
 #: ulng.rsmsgrensel
+#, object-pascal-format
 msgid "Rename/move selected \"%s\"?"
 msgstr "Omdøb/flyt \"%s\" til?"
 
@@ -12823,14 +13160,17 @@ msgid "Please, restart Double Commander in order to apply changes"
 msgstr "Genstart venligst Double Commander for at udføre ændringerne"
 
 #: ulng.rsmsgscriptcantfindlibrary
+#, object-pascal-format
 msgid "ERROR: Problem loading Lua library file \"%s\""
 msgstr ""
 
 #: ulng.rsmsgsekectfiletype
+#, object-pascal-format
 msgid "Select to which file type to add extension \"%s\""
 msgstr "Vælg filtype at føje filendelsen \"%s\" til"
 
 #: ulng.rsmsgselectedinfo
+#, object-pascal-format
 msgid "Selected: %s of %s, files: %d of %d, folders: %d of %d"
 msgstr "Valgte: %s af %s, filer: %d af %d, mapper: %d af %d"
 
@@ -12928,6 +13268,7 @@ msgid "Use Windows special folder (TC)..."
 msgstr "Anvend særlig Windowsmappe (TC)..."
 
 #: ulng.rsmsgtabforopeninginnewtab
+#, object-pascal-format
 msgid "This tab (%s) is locked! Open directory in another tab?"
 msgstr "Fanebladet (%s) er låst! Vil du åbne mappen i et andet faneblad?"
 
@@ -12944,36 +13285,39 @@ msgid "Target path:"
 msgstr "Sti:"
 
 #: ulng.rsmsgtcconfignotfound
+#, object-pascal-format
 msgid ""
 "Error! Cannot find the TC configuration file:\n"
-"%s\n"
+"%s"
 msgstr ""
 "Fejl! Kan ikke finde TC-konfigurationsfilen:\n"
-"%s\n"
+"%s"
 
 #: ulng.rsmsgtcexecutablenotfound
+#, object-pascal-format
 msgid ""
 "Error! Cannot find the TC configuration executable:\n"
-"%s\n"
+"%s"
 msgstr ""
 "Fejl! Kan ikke finde TC-konfigurations EXE-fil:\n"
-"%s\n"
+"%s"
 
 #: ulng.rsmsgtcisrunning
 msgid ""
 "Error! TC is still running but it should be closed for this operation.\n"
-"Close it and press OK or press CANCEL to abort.\n"
+"Close it and press OK or press CANCEL to abort."
 msgstr ""
 "Fejl! TC kører stadigvæk men burde være lukket i fm. denne handling.\n"
-"Luk TC og tryk OK eller tryk Annuller for at afbryde.\n"
+"Luk TC og tryk OK eller tryk Annuller for at afbryde."
 
 #: ulng.rsmsgtctoolbarnotfound
+#, object-pascal-format
 msgid ""
 "Error! Cannot find the desired wanted TC toolbar output folder:\n"
-"%s\n"
+"%s"
 msgstr ""
 "Fejl! Kan ikke finde den ønskede TC-værktøjslinjeoutputmappe:\n"
-"%s\n"
+"%s"
 
 #: ulng.rsmsgtctoolbarwheretosave
 msgid "Enter location and filename where to save a TC Toolbar file"
@@ -12992,6 +13336,7 @@ msgid "Do you want to test selected archives?"
 msgstr ""
 
 #: ulng.rsmsgthisisnowinclipboard
+#, object-pascal-format
 msgid "\"%s\" is now in the clipboard"
 msgstr "\"%s\" er nu i Udklipsholderen"
 
@@ -13012,12 +13357,13 @@ msgid "Enter location and filename of Toolbar to restore"
 msgstr "Indtast placering og filnavn på værktøjslinjen, der skal gendannes"
 
 #: ulng.rsmsgtoolbarsaved
+#, object-pascal-format
 msgid ""
 "Saved!\n"
-"Toolbar filename: %s\n"
+"Toolbar filename: %s"
 msgstr ""
 "Gem!\n"
-"Værktøjslinjens filnavn: %s\n"
+"Værktøjslinjens filnavn: %s"
 
 #: ulng.rsmsgtoomanyfilesselected
 msgid "Too many files selected."
@@ -13077,10 +13423,12 @@ msgid "Do you want to configure Lua library location?"
 msgstr ""
 
 #: ulng.rsmsgwipefldr
+#, object-pascal-format
 msgid "Wipe %d selected files/directories?"
 msgstr "Sikker sletning af %d valgte filer/mapper?"
 
 #: ulng.rsmsgwipesel
+#, object-pascal-format
 msgid "Wipe selected \"%s\"?"
 msgstr "Sikker sletning af \"%s\"?"
 
@@ -13091,10 +13439,10 @@ msgstr "med"
 #: ulng.rsmsgwrongpasswordtryagain
 msgid ""
 "Wrong password!\n"
-"Please try again!\n"
+"Please try again!"
 msgstr ""
 "Forkert adgangskode!\n"
-"Prøv venligst igen!\n"
+"Prøv venligst igen!"
 
 #: ulng.rsmulrenautorename
 msgid "Do auto-rename to \"name (1).ext\", \"name (2).ext\" etc.?"
@@ -13129,6 +13477,7 @@ msgid "Enter variable name"
 msgstr ""
 
 #: ulng.rsmulrenentervalueforvar
+#, object-pascal-format
 msgid "Enter value for variable \"%s\""
 msgstr ""
 
@@ -13302,9 +13651,10 @@ msgid "Enter new preset name"
 msgstr ""
 
 #: ulng.rsmulrensavemodifiedpreset
+#, object-pascal-format
 msgid ""
 "\"%s\" preset has been modified.\n"
-"Do you want to save it now?\n"
+"Do you want to save it now?"
 msgstr ""
 
 #: ulng.rsmulrensortingpresets
@@ -13321,6 +13671,7 @@ msgid "Warning, duplicate names!"
 msgstr "Advarsel! Doublerede navne!"
 
 #: ulng.rsmulrenwronglinesnumber
+#, object-pascal-format
 msgid "File contains wrong number of lines: %d, should be %d!"
 msgstr "Filen indeholder et forkert antal linjer: %d, burde være %d!"
 
@@ -13358,6 +13709,10 @@ msgstr "Spil"
 msgctxt "ulng.rsopenwithgraphics"
 msgid "Graphics"
 msgstr "Grafik"
+
+#: ulng.rsopenwithmacosfilter
+msgid "Applications (*.app)|*.app|All files (*)|*"
+msgstr ""
 
 #: ulng.rsopenwithmultimedia
 msgid "Multimedia"
@@ -13403,10 +13758,12 @@ msgid "Calculating checksum"
 msgstr "Danner kontrolsumfil"
 
 #: ulng.rsopercalculatingchecksumin
+#, object-pascal-format
 msgid "Calculating checksum in \"%s\""
 msgstr "Danner kontrolsumfil i \"%s\""
 
 #: ulng.rsopercalculatingchecksumof
+#, object-pascal-format
 msgid "Calculating checksum of \"%s\""
 msgstr "Danner kontrolsumfil af \"%s\""
 
@@ -13416,6 +13773,7 @@ msgid "Calculating"
 msgstr "Beregner"
 
 #: ulng.rsopercalculatingstatisticsin
+#, object-pascal-format
 msgid "Calculating \"%s\""
 msgstr "Beregner \"%s\""
 
@@ -13424,6 +13782,7 @@ msgid "Joining"
 msgstr "Samler"
 
 #: ulng.rsopercombiningfromto
+#, object-pascal-format
 msgid "Joining files in \"%s\" to \"%s\""
 msgstr "Samler filer i \"%s\" til \"%s\""
 
@@ -13432,10 +13791,12 @@ msgid "Copying"
 msgstr "Kopierer"
 
 #: ulng.rsopercopyingfromto
+#, object-pascal-format
 msgid "Copying from \"%s\" to \"%s\""
 msgstr "Kopierer fra \"%s\" til \"%s\""
 
 #: ulng.rsopercopyingsomethingto
+#, object-pascal-format
 msgid "Copying \"%s\" to \"%s\""
 msgstr "Kopierer \"%s\" til \"%s\""
 
@@ -13444,6 +13805,7 @@ msgid "Creating directory"
 msgstr "Danner mappe"
 
 #: ulng.rsopercreatingsomedirectory
+#, object-pascal-format
 msgid "Creating directory \"%s\""
 msgstr "Danner mappe \"\"%s\""
 
@@ -13452,10 +13814,12 @@ msgid "Deleting"
 msgstr "Sletter"
 
 #: ulng.rsoperdeletingin
+#, object-pascal-format
 msgid "Deleting in \"%s\""
 msgstr "Sletter i \"%s\""
 
 #: ulng.rsoperdeletingsomething
+#, object-pascal-format
 msgid "Deleting \"%s\""
 msgstr "Sletter \"%s\""
 
@@ -13464,6 +13828,7 @@ msgid "Executing"
 msgstr "Udfører"
 
 #: ulng.rsoperexecutingsomething
+#, object-pascal-format
 msgid "Executing \"%s\""
 msgstr "Udfører \"%s\""
 
@@ -13472,6 +13837,7 @@ msgid "Extracting"
 msgstr "Pakker ud"
 
 #: ulng.rsoperextractingfromto
+#, object-pascal-format
 msgid "Extracting from \"%s\" to \"%s\""
 msgstr "Pakker ud fra \"%s\" til \"%s\""
 
@@ -13484,6 +13850,7 @@ msgid "Listing"
 msgstr "Oplister"
 
 #: ulng.rsoperlistingin
+#, object-pascal-format
 msgid "Listing \"%s\""
 msgstr "Oplister \"%s\""
 
@@ -13492,10 +13859,12 @@ msgid "Moving"
 msgstr "Flytter"
 
 #: ulng.rsopermovingfromto
+#, object-pascal-format
 msgid "Moving from \"%s\" to \"%s\""
 msgstr "Flytter fra \"%s\" til\"%s\""
 
 #: ulng.rsopermovingsomethingto
+#, object-pascal-format
 msgid "Moving \"%s\" to \"%s\""
 msgstr "Flytter \"%s\" til \"%s\""
 
@@ -13508,10 +13877,12 @@ msgid "Packing"
 msgstr "Pakker"
 
 #: ulng.rsoperpackingfromto
+#, object-pascal-format
 msgid "Packing from \"%s\" to \"%s\""
 msgstr "Pakker fra \"%s\" til \"%s\""
 
 #: ulng.rsoperpackingsomethingto
+#, object-pascal-format
 msgid "Packing \"%s\" to \"%s\""
 msgstr "Pakker \"%s\" til \"%s\""
 
@@ -13532,10 +13903,12 @@ msgid "Setting property"
 msgstr "Indstiller egenskab"
 
 #: ulng.rsopersettingpropertyin
+#, object-pascal-format
 msgid "Setting property in \"%s\""
 msgstr "Indstiller egenskab i \"%s\""
 
 #: ulng.rsopersettingpropertyof
+#, object-pascal-format
 msgid "Setting property of \"%s\""
 msgstr "Indstiller egenskab af \"%s\""
 
@@ -13544,6 +13917,7 @@ msgid "Splitting"
 msgstr "Opdeler"
 
 #: ulng.rsopersplittingfromto
+#, object-pascal-format
 msgid "Splitting \"%s\" to \"%s\""
 msgstr "Opdeler \"%s\" til \"%s\""
 
@@ -13565,10 +13939,12 @@ msgid "Testing"
 msgstr "Kontrollerer"
 
 #: ulng.rsopertestingin
+#, object-pascal-format
 msgid "Testing in \"%s\""
 msgstr "Kontrollerer i \"%s\""
 
 #: ulng.rsopertestingsomething
+#, object-pascal-format
 msgid "Testing \"%s\""
 msgstr "Kontrollerer \"%s\""
 
@@ -13577,10 +13953,12 @@ msgid "Verifying checksum"
 msgstr "Kontrollerer kontrolsum"
 
 #: ulng.rsoperverifyingchecksumin
+#, object-pascal-format
 msgid "Verifying checksum in \"%s\""
 msgstr "Kontrollerer kontrolsum i \"%s\""
 
 #: ulng.rsoperverifyingchecksumof
+#, object-pascal-format
 msgid "Verifying checksum of \"%s\""
 msgstr "Kontrollerer kontrolsum af \"%s\""
 
@@ -13597,10 +13975,12 @@ msgid "Wiping"
 msgstr "Sletter (fuldstændigt)"
 
 #: ulng.rsoperwipingin
+#, object-pascal-format
 msgid "Wiping in \"%s\""
 msgstr "Sletter (fuldstændigt) i \"%s\""
 
 #: ulng.rsoperwipingsomething
+#, object-pascal-format
 msgid "Wiping \"%s\""
 msgstr "Sletter (fuldstændigt) \"%s\""
 
@@ -13648,6 +14028,7 @@ msgid "Change Archiver Listing Encoding"
 msgstr "Skift pakkeprogrammets kodning af liste"
 
 #: ulng.rsoptarchiverconfirmdelete
+#, object-pascal-format
 msgctxt "ulng.rsoptarchiverconfirmdelete"
 msgid "Are you sure you want to delete: \"%s\"?"
 msgstr "Er du sikker på, at du vil slette: \"%s\"?"
@@ -13665,6 +14046,7 @@ msgid "Export archiver configuration"
 msgstr "Eksporter pakkeprogramets indstillinger"
 
 #: ulng.rsoptarchiverexportdone
+#, object-pascal-format
 msgctxt "ulng.rsoptarchiverexportdone"
 msgid "Exportation of %d elements to file \"%s\" completed."
 msgstr "Eksporten af %d elementer til fil \"%s\" er færdig."
@@ -13687,6 +14069,7 @@ msgid "Import archiver configuration"
 msgstr "Importer pakkeprogrammets indstillinger"
 
 #: ulng.rsoptarchiverimportdone
+#, object-pascal-format
 msgctxt "ulng.rsoptarchiverimportdone"
 msgid "Importation of %d elements from file \"%s\" completed."
 msgstr "Importen af %d elementer til fil \"%s\" er færdig."
@@ -13749,6 +14132,7 @@ msgid "Archive type name:"
 msgstr "Arkivtype-navn:"
 
 #: ulng.rsoptassocpluginwith
+#, object-pascal-format
 msgid "Associate plugin \"%s\" with:"
 msgstr "Associer plugin \"%s\" med:"
 
@@ -13789,10 +14173,12 @@ msgid "float"
 msgstr "Dynamisk (x B/k/M/G);bytes (B);kilobytes (kB);Megabytes (MB);Gigabytes (GB)"
 
 #: ulng.rsopthotkeysadddeleteshortcutlong
+#, object-pascal-format
 msgid "Shortcut %s for cm_Delete will be registered, so it can be used to reverse this setting."
 msgstr "Genvejen %s for cm_Delete vil blive registreret, så den kan bruges til at fortryde denne indstilling"
 
 #: ulng.rsopthotkeysaddhotkey
+#, object-pascal-format
 msgid "Add hotkey for %s"
 msgstr "Tilføj genvejstast for %s"
 
@@ -13815,10 +14201,12 @@ msgid "Command"
 msgstr "Kommando"
 
 #: ulng.rsopthotkeysdeletetrashcanoverrides
+#, object-pascal-format
 msgid "Shortcut %s for cm_Delete has a parameter that overrides this setting. Do you want to change this parameter to use the global setting?"
 msgstr "Genvejen %s for cm_Delete har en parameter som tilsidesætter denne indstilling. Vil du ændre den indstilling for at anvende de globale indstillinger?"
 
 #: ulng.rsopthotkeysdeletetrashcanparameterexists
+#, object-pascal-format
 msgid "Shortcut %s for cm_Delete needs to have a parameter changed to match shortcut %s. Do you want to change it?"
 msgstr "Genvejen %s for cm_Delete skal have en parameter ændret for at matche genvejen %s. Vil du ændre parameteren?"
 
@@ -13828,6 +14216,7 @@ msgid "Description"
 msgstr "Beskrivelse"
 
 #: ulng.rsopthotkeysedithotkey
+#, object-pascal-format
 msgid "Edit hotkey for %s"
 msgstr "Rediger genvejstast for %s"
 
@@ -13862,10 +14251,12 @@ msgid "Set shortcut to delete file"
 msgstr "Indstil genvej for at slette fil"
 
 #: ulng.rsopthotkeysshortcutfordeletealreadyassigned
+#, object-pascal-format
 msgid "For this setting to work with shortcut %s, shortcut %s must be assigned to cm_Delete but it is already assigned to %s. Do you want to change it?"
 msgstr "For at denne indstilling skal kunne virke med genvejen %s, skal genvejen %s tildeles til cm_Delete. Men den er allerede tildelt til %s. Vil du ændre det?"
 
 #: ulng.rsopthotkeysshortcutfordeleteissequence
+#, object-pascal-format
 msgid "Shortcut %s for cm_Delete is a sequence shortcut for which a hotkey with reversed Shift cannot be assigned. This setting might not work."
 msgstr "Genvejen %s for cm_Delete er en sekventiel genvej for hvilken en genvej med omvendt Shift ikke kan tildeles. Denne indstilling vil derfor måske ikke virke."
 
@@ -13874,15 +14265,17 @@ msgid "Shortcut in use"
 msgstr "Genvejstast anvendes"
 
 #: ulng.rsopthotkeysshortcutusedtext1
-#, fuzzy,badformat
+#, object-pascal-format, fuzzy, badformat
 msgid "Shortcut %s is already used."
 msgstr "Genvejstast %s anvendes allerede til %s."
 
 #: ulng.rsopthotkeysshortcutusedtext2
+#, object-pascal-format
 msgid "Change it to %s?"
 msgstr "Ændre den til %s?"
 
 #: ulng.rsopthotkeysusedby
+#, object-pascal-format
 msgid "used for %s in %s"
 msgstr "bruges af %s i %s"
 
@@ -13950,6 +14343,7 @@ msgstr "Drev-valgknap"
 
 # Opsætning - Indstillinger - Faneblade - Favoritfaneblade
 #: ulng.rsoptionseditorfavoritetabs
+msgctxt "ulng.rsoptionseditorfavoritetabs"
 msgid "Favorite Tabs"
 msgstr "Favoritfaneblade"
 
@@ -14073,14 +14467,15 @@ msgid "Multi-Rename Tool"
 msgstr ""
 
 #: ulng.rsoptionseditoroptionschanged
+#, object-pascal-format
 msgid ""
 "Options have changed in \"%s\"\n"
 "\n"
-"Do you want to save modifications?\n"
+"Do you want to save modifications?"
 msgstr ""
 "Indstillingerne er ændret i \"%s\"\n"
 "\n"
-"Vil du gemme ændringerne?\n"
+"Vil du gemme ændringerne?"
 
 # Opsætning - Indstillinger - Plugin
 #: ulng.rsoptionseditorplugins
@@ -14151,6 +14546,7 @@ msgid "Personalized float;Personalized byte;Personalized kilobyte;Personalized m
 msgstr "Tilpasset dynamisk;Tilpasset til byte;Tilpasset til kilobyte;Tilpasset til megabyte;Tilpasset til gigabyte;Tilpasset til terabyte"
 
 #: ulng.rsoptpluginalreadyassigned
+#, object-pascal-format
 msgid "Plugin %s is already assigned for the following extensions:"
 msgstr "Plugin %s er allerede tildelt følgende filtyper:"
 
@@ -14264,10 +14660,12 @@ msgid "Tooltip file type name:"
 msgstr "Filtypenavn for hjælpeteksten:"
 
 #: ulng.rsopttooltipfiletypealreadyexists
+#, object-pascal-format
 msgid "\"%s\" already exists!"
 msgstr "\"%s\" findes allerede!"
 
 #: ulng.rsopttooltipfiletypeconfirmdelete
+#, object-pascal-format
 msgctxt "ulng.rsopttooltipfiletypeconfirmdelete"
 msgid "Are you sure you want to delete: \"%s\"?"
 msgstr "Er du sikker på, at du vil slette: \"%s\"?"
@@ -14281,7 +14679,7 @@ msgid "Export tooltip file type configuration"
 msgstr "Eksportér konfiguration af værktøjshjælp-filtype"
 
 #: ulng.rsopttooltipfiletypeexportdone
-#, fuzzy,badformat
+#, object-pascal-format, fuzzy, badformat
 msgctxt "ulng.rsopttooltipfiletypeexportdone"
 msgid "Exportation of %d elements to file \"%s\" completed."
 msgstr "Eksporten af &d elementer til fil \"%s\" er færdig."
@@ -14296,6 +14694,7 @@ msgid "Import tooltip file type configuration"
 msgstr "Importér konfiguration af værktøjshjælpe-filtype"
 
 #: ulng.rsopttooltipfiletypeimportdone
+#, object-pascal-format
 msgctxt "ulng.rsopttooltipfiletypeimportdone"
 msgid "Importation of %d elements from file \"%s\" completed."
 msgstr "Importen af %d elementer fra fil \"%s\" er færdig"
@@ -14348,6 +14747,7 @@ msgid "="
 msgstr "="
 
 #: ulng.rspluginsearchfieldnotfound
+#, object-pascal-format
 msgid "Field \"%s\" not found!"
 msgstr "Feltet \"%s\" blev ikke fundet"
 
@@ -14373,6 +14773,7 @@ msgid "!regexp"
 msgstr "!regexp (regulært udtryk)"
 
 #: ulng.rspluginsearchpluginnotfound
+#, object-pascal-format
 msgid "Plugin \"%s\" not found!"
 msgstr "Plugin \"%s\" blev ikke fundet"
 
@@ -14381,19 +14782,23 @@ msgid "regexp"
 msgstr "regexp (regulært udtryk)"
 
 #: ulng.rspluginsearchunitnotfoundforfield
+#, object-pascal-format
 msgctxt "ulng.rspluginsearchunitnotfoundforfield"
 msgid "Unit \"%s\" not found for field \"%s\" !"
 msgstr "Enheden \"%s\" blev ikke fundet for feltet \"%s\" !"
 
 #: ulng.rspropscontains
+#, object-pascal-format
 msgid "Files: %d, folders: %d"
 msgstr "Filer: %d, mapper: %d"
 
 #: ulng.rspropserrchmod
+#, object-pascal-format
 msgid "Can not change access rights for \"%s\""
 msgstr "Kan ikke ændre adgangsrettigheder for \"%s\""
 
 #: ulng.rspropserrchown
+#, object-pascal-format
 msgid "Can not change owner for \"%s\""
 msgstr "Kan ikke ændre ejer for \"%s\""
 
@@ -14405,6 +14810,10 @@ msgstr "Fil"
 msgctxt "ulng.rspropsfolder"
 msgid "Directory"
 msgstr "Mappe"
+
+#: ulng.rspropsmultipletypes
+msgid "Multiple types"
+msgstr ""
 
 #: ulng.rspropsnmdpipe
 msgid "Named pipe"
@@ -14445,18 +14854,18 @@ msgstr "<unavngivet skabelon>"
 #: ulng.rssearchwithdsxplugininprogress
 msgid ""
 "A file search using DSX plugin is already in progress.\n"
-"We need that one to be completed before to launch a new one.\n"
+"We need that one to be completed before to launch a new one."
 msgstr ""
 "En filsøgning med DSX-plugin'et er allerede i gang.\n"
-"Den søgning skal afsluttes, inden en ny søgning kan startes.\n"
+"Den søgning skal afsluttes, inden en ny søgning kan startes."
 
 #: ulng.rssearchwithwdxplugininprogress
 msgid ""
 "A file search using WDX plugin is already in progress.\n"
-"We need that one to be completed before to launch a new one.\n"
+"We need that one to be completed before to launch a new one."
 msgstr ""
 "En filsøgning med WDX-plugin'et er allerede i gang.\n"
-"Den søgning skal afsluttes, inden en ny søgning kan startes.\n"
+"Den søgning skal afsluttes, inden en ny søgning kan startes."
 
 #: ulng.rsselectdir
 msgid "Select a directory"
@@ -14472,6 +14881,7 @@ msgid "Select your window"
 msgstr "Vælg dit vindue"
 
 #: ulng.rsshowhelpfor
+#, object-pascal-format
 msgid "&Show help for %s"
 msgstr "Vi&s hjælp for %s"
 
@@ -14566,10 +14976,11 @@ msgstr "Terabytes"
 
 # Filer- Beregn_brugt_plads
 #: ulng.rsspacemsg
+#, object-pascal-format
 msgid "Files: %d, Dirs: %d, Size: %s (%s bytes)"
 msgstr ""
 "Total brugt plads i fil(er): %d og mappe(r): %d\n"
-"Størrelse: %s (= %s bytes)\n"
+"Størrelse: %s (= %s bytes)"
 
 # Filer- Opdel fil
 #: ulng.rsspliterrdirectory
@@ -14788,6 +15199,7 @@ msgid "Viewer"
 msgstr "Fremviser"
 
 #: ulng.rsunhandledexceptionmessage
+#, object-pascal-format
 msgid "Please report this error to the bug tracker with a description of what you were doing and the following file:%sPress %s to continue or %s to abort the program."
 msgstr "Rapporter venligst denne fejl i bug-tracker med en beskrivelse af, hvad du gjorde og følgende fil: %s Tryk %s for at fortsætte eller %s at afbryde programmet."
 
@@ -15013,6 +15425,7 @@ msgid "New Size"
 msgstr "Ny størrelse"
 
 #: ulng.rsviewnotfound
+#, object-pascal-format
 msgid "%s not found!"
 msgstr "%s ikke fundet!"
 
@@ -15030,6 +15443,7 @@ msgid "with internal viewer"
 msgstr "med intern fremviser"
 
 #: ulng.rsxreplacements
+#, object-pascal-format
 msgid "Number of replacement: %d"
 msgstr "Antal erstattede: %d"
 
@@ -15038,6 +15452,7 @@ msgid "No replacement took place."
 msgstr "Ingen erstatning fandt sted."
 
 #: umaincommands.rsfavoritetabs_setupnotexist
+#, object-pascal-format
 msgid "No setup named \"%s\""
 msgstr ""
 

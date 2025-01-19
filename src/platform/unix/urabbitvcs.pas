@@ -70,12 +70,12 @@ var
 implementation
 
 uses
-  BaseUnix, Unix, DBus,
+  BaseUnix, Unix, DBus, LazLogger,
   DCUnix, DCClassesUtf8, uGlobs, uGlobsPaths, uMyUnix, uPython
 {$IF DEFINED(RabbitVCS)}
   , fpjson, jsonparser, jsonscanner
 {$ENDIF}
-{$IF DEFINED(LCLQT) or DEFINED(LCLQT5)}
+{$IF DEFINED(LCLQT) or DEFINED(LCLQT5) or DEFINED(LCLQT6)}
   , uGObject2
 {$ENDIF}
   ;
@@ -95,7 +95,7 @@ procedure Initialize(Self: TObject); forward;
 
 procedure Print(const sMessage: String);
 begin
-  WriteLn('RabbitVCS: ', sMessage);
+  DebugLn('RabbitVCS: ', sMessage);
 end;
 
 function CheckError(const sMessage: String; pError: PDBusError): Boolean;
@@ -425,7 +425,7 @@ var
   pyVersion: PPyObject;
   AVersion: TStringArray;
   Major, Minor, Micro: Integer;
-{$IF DEFINED(LCLQT) or DEFINED(LCLQT5)}
+{$IF DEFINED(LCLQT) or DEFINED(LCLQT5) or DEFINED(LCLQT6)}
   GtkWidget: TGType;
   GtkClass, Gtk3: Pointer;
 {$ENDIF}
@@ -451,7 +451,7 @@ begin
         end;
         // RabbitVCS migrated to GTK3 from version 0.17.1
         RabbitGtk3:= (Major > 0) or (Minor > 17) or ((Minor = 17) and (Micro > 0));
-{$IF DEFINED(LCLQT) or DEFINED(LCLQT5)}
+{$IF DEFINED(LCLQT) or DEFINED(LCLQT5) or DEFINED(LCLQT6)}
         // Check GTK platform theme plugin
         GtkWidget:= g_type_from_name('GtkWidget');
         Result:= (GtkWidget = 0);

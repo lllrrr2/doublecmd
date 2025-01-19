@@ -589,7 +589,7 @@ object frmEditor: TfrmEditor
         Width = 13
         MouseActions = <>
         MarkupInfo.Background = clBtnFace
-        MarkupInfo.Foreground = clNone
+        MarkupInfo.Foreground = clBtnText
         DigitCount = 2
         ShowOnlyLineNumbersMultiplesOf = 1
         ZeroStart = False
@@ -820,6 +820,9 @@ object frmEditor: TfrmEditor
       object miGotoLine: TMenuItem
         Action = actEditGotoLine
       end
+      object miTimeDate: TMenuItem
+        Action = actEditTimeDate
+      end
       object N5: TMenuItem
         Caption = '-'
       end
@@ -915,13 +918,6 @@ object frmEditor: TfrmEditor
       HelpType = htKeyword
       Hint = 'Exit'
       ImageIndex = 12
-      OnExecute = actExecute
-    end
-    object actSaveAll: TAction
-      Category = 'File'
-      Caption = 'Sa&ve All'
-      HelpType = htKeyword
-      Hint = 'Save All'
       OnExecute = actExecute
     end
     object actEditFind: TAction
@@ -1037,6 +1033,11 @@ object frmEditor: TfrmEditor
       Category = 'Edit'
       Caption = 'Goto Line...'
       ImageIndex = 16
+      OnExecute = actExecute
+    end
+    object actEditTimeDate: TAction
+      Category = 'Edit'
+      Caption = 'Time/Date'
       OnExecute = actExecute
     end
     object actEditFindPrevious: TAction

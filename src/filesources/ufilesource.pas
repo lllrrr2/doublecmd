@@ -10,13 +10,66 @@ uses
   uFileSourceOperationTypes,
   uFileSourceProperty,
   uFileProperty,
-  uFile;
+  uFile, uDisplayFile;
 
 type
 
   TFileSource = class;
   TFileSourceConnection = class;
   IFileSource = interface;
+
+  TFileSourceConsultResult = ( fscrSuccess, fscrNotImplemented, fscrNotSupported );
+
+  TFileSourceConsultParams = Record
+    handled: Boolean;
+
+    operationType: TFileSourceOperationType;
+    files: TFiles;
+    targetPath: String;
+
+    sourceFS: IFileSource;
+    targetFS: IFileSource;
+
+    currentFS: IFileSource;
+    partnerFS: IFileSource;
+
+    consultResult: TFileSourceConsultResult;
+    resultOperationType: TFileSourceOperationType;
+    resultFS: IFileSource;
+    resultTargetPath: String;
+    operationTemp: Boolean;
+  end;
+
+  TFileSourceProcessor = class
+    procedure consultOperation( var params: TFileSourceConsultParams ); virtual; abstract;
+    procedure confirmOperation( var params: TFileSourceConsultParams ); virtual; abstract;
+  end;
+
+  TFileSourceUIParams = record
+    sender: TObject;
+    fs: IFileSource;
+    displayFile: TDisplayFile;
+
+    col: Integer;
+    row: Integer;
+    drawingRect: TRect;
+
+    case Byte of
+      0: (
+           iconRect: TRect;
+           focused: Boolean
+         );
+      1: (
+           shift: TShiftState;
+           x: Integer;
+           y: Integer
+         );
+  end;
+
+  TFileSourceUIHandler = class
+    procedure draw( var params: TFileSourceUIParams ); virtual; abstract;
+    procedure click( var  params: TFileSourceUIParams ); virtual; abstract;
+  end;
 
   TFileSourceField = record
     Content: String;
@@ -39,9 +92,13 @@ type
   IFileSource = interface(IInterface)
     ['{B7F0C4C8-59F6-4A35-A54C-E8242F4AD809}']
 
+    function GetProcessor: TFileSourceProcessor;
+    function GetUIHandler: TFileSourceUIHandler;
+
     function Equals(aFileSource: IFileSource): Boolean;
     function IsInterface(InterfaceGuid: TGuid): Boolean;
     function IsClass(ClassType: TClass): Boolean;
+    function GetClass: TFileSource;
     function GetURI: TURI;
     function GetClassName: String;
     function GetRefCount: Integer;
@@ -62,7 +119,7 @@ type
     function CreateFileObject(const APath: String): TFile;
 
     function CanRetrieveProperties(AFile: TFile; PropertiesToSet: TFilePropertiesTypes): Boolean;
-    procedure RetrieveProperties(AFile: TFile; PropertiesToSet: TFilePropertiesTypes; AVariantProperties: array of String);
+    procedure RetrieveProperties(AFile: TFile; PropertiesToSet: TFilePropertiesTypes; const AVariantProperties: array of String);
 
     function CreateListOperation(TargetPath: String): TFileSourceOperation;
     function CreateCopyOperation(var SourceFiles: TFiles;
@@ -91,6 +148,10 @@ type
     function CreateSetFilePropertyOperation(var theTargetFiles: TFiles;
                                             var theNewProperties: TFileProperties): TFileSourceOperation;
     function GetOperationClass(OperationType: TFileSourceOperationType): TFileSourceOperationClass;
+
+    function IsSystemFile(aFile: TFile): Boolean;
+    function IsHiddenFile(aFile: TFile): Boolean;
+    function GetDisplayFileName(aFile: TFile): String; virtual;
 
     function IsPathAtRoot(Path: String): Boolean;
     function GetParentDir(sPath : String): String;
@@ -211,9 +272,13 @@ type
     constructor Create(const URI: TURI); virtual; overload;
     destructor Destroy; override;
 
+    function GetProcessor: TFileSourceProcessor; virtual;
+    function GetUIHandler: TFileSourceUIHandler; virtual;
+
     function Equals(aFileSource: IFileSource): Boolean; overload;
     function IsInterface(InterfaceGuid: TGuid): Boolean;
     function IsClass(aClassType: TClass): Boolean;
+    function GetClass: TFileSource;
     function GetClassName: String; // For debugging purposes.
     function GetRefCount: Integer; // For debugging purposes.
 
@@ -232,7 +297,7 @@ type
     // Create an empty TFile object with appropriate properties for the file.
     class function CreateFile(const APath: String): TFile; virtual;
 
-    procedure RetrieveProperties(AFile: TFile; PropertiesToSet: TFilePropertiesTypes; AVariantProperties: array of String); virtual;
+    procedure RetrieveProperties(AFile: TFile; PropertiesToSet: TFilePropertiesTypes; const AVariantProperties: array of String); virtual;
     function CanRetrieveProperties(AFile: TFile; PropertiesToSet: TFilePropertiesTypes): Boolean; virtual;
 
     // These functions create an operation object specific to the file source.
@@ -274,6 +339,11 @@ type
        Returns @true if the given path is the root path of the file source,
        @false otherwise.
     }
+
+    function IsSystemFile(aFile: TFile): Boolean; virtual;
+    function IsHiddenFile(aFile: TFile): Boolean; virtual;
+    function GetDisplayFileName(aFile: TFile): String; virtual;
+
     function IsPathAtRoot(Path: String): Boolean; virtual;
 
     function GetParentDir(sPath : String): String; virtual;
@@ -349,28 +419,12 @@ type
   TFileSources = class(TInterfaceList)
   private
     function Get(I: Integer): IFileSource;
+    procedure Put(i : Integer;item : IFileSource);
 
   public
     procedure Assign(otherFileSources: TFileSources);
 
-    property Items[I: Integer]: IFileSource read Get; default;
-  end;
-
-  { TFileSourceManager }
-
-  TFileSourceManager = class
-  private
-    FFileSources: TFileSources;
-
-    // Only allow adding and removing to/from Manager by TFileSource constructor and destructor.
-    procedure Add(aFileSource: IFileSource);
-    procedure Remove(aFileSource: IFileSource);
-
-  public
-    constructor Create;
-    destructor Destroy; override;
-
-    function Find(FileSourceClass: TClass; Address: String; CaseSensitive: Boolean = True): IFileSource;
+    property Items[I: Integer]: IFileSource read Get write Put; default;
   end;
 
   EFileSourceException = class(Exception);
@@ -383,12 +437,12 @@ type
   end;
 
 var
-  FileSourceManager: TFileSourceManager;
+  defaultFileSourceProcessor: TFileSourceProcessor;
 
 implementation
 
 uses
-  uDebug, uFileSourceListOperation, uLng;
+  uDebug, uFileSourceManager, uFileSourceListOperation, uLng;
 
 { TFileSource }
 
@@ -466,6 +520,16 @@ begin
   inherited Destroy;
 end;
 
+function TFileSource.GetProcessor: TFileSourceProcessor;
+begin
+  Result:= defaultFileSourceProcessor;
+end;
+
+function TFileSource.GetUIHandler: TFileSourceUIHandler;
+begin
+  Result:= nil;
+end;
+
 function TFileSource.Equals(aFileSource: IFileSource): Boolean;
 begin
   // Both interface variables must be brought to the same interface.
@@ -484,6 +548,11 @@ end;
 function TFileSource.IsClass(aClassType: TClass): Boolean;
 begin
   Result := Self is aClassType;
+end;
+
+function TFileSource.GetClass: TFileSource;
+begin
+  Result := Self
 end;
 
 function TFileSource.GetClassName: String;
@@ -650,7 +719,7 @@ begin
   Result := CreateFile(APath);
 end;
 
-procedure TFileSource.RetrieveProperties(AFile: TFile; PropertiesToSet: TFilePropertiesTypes; AVariantProperties: array of String);
+procedure TFileSource.RetrieveProperties(AFile: TFile; PropertiesToSet: TFilePropertiesTypes; const AVariantProperties: array of String);
 begin
   // Does not set any properties by default.
 end;
@@ -759,6 +828,42 @@ end;
 class function TFileSource.IsSupportedPath(const Path: String): Boolean;
 begin
   Result:= True;
+end;
+
+function TFileSource.IsSystemFile(aFile: TFile): Boolean;
+begin
+{$IF DEFINED(MSWINDOWS)}
+  if fpAttributes in aFile.SupportedProperties then
+    Result := TFileAttributesProperty(aFile.Properties[fpAttributes]).IsSysFile
+  else
+    Result := False;
+{$ELSEIF DEFINED(DARWIN)}
+  if (Length(aFile.Name) > 1) and (aFile.Name[1] = '.') and (aFile.Name <> '..') then exit(true);
+  if aFile.Name='Icon'#$0D then exit(true);
+  exit(false);
+{$ELSE}
+  // Files beginning with '.' are treated as system/hidden files on Unix.
+  Result := (Length(aFile.Name) > 1) and (aFile.Name[1] = '.') and (aFile.Name <> '..');
+{$ENDIF}
+end;
+
+function TFileSource.IsHiddenFile(aFile: TFile): Boolean;
+begin
+  if not (fpAttributes in aFile.SupportedProperties) then
+    Result := False
+  else begin
+    if aFile.Properties[fpAttributes] is TNtfsFileAttributesProperty then
+      Result := TNtfsFileAttributesProperty(aFile.Properties[fpAttributes]).IsHidden
+    else begin
+      // Files beginning with '.' are treated as system/hidden files on Unix.
+      Result := (Length(aFile.Name) > 1) and (aFile.Name[1] = '.') and (aFile.Name <> '..');
+    end;
+  end;
+end;
+
+function TFileSource.GetDisplayFileName(aFile: TFile): String;
+begin
+  Result:= EmptyStr;
 end;
 
 function TFileSource.GetConnection(Operation: TFileSourceOperation): TFileSourceConnection;
@@ -932,6 +1037,11 @@ begin
     Result := nil;
 end;
 
+procedure TFileSources.Put(i: Integer; item: IFileSource);
+begin
+  inherited Put(i, item);
+end;
+
 procedure TFileSources.Assign(otherFileSources: TFileSources);
 var
   i: Integer;
@@ -941,85 +1051,11 @@ begin
     Add(otherFileSources.Items[i]);
 end;
 
-{ TFileSourceManager }
-
-constructor TFileSourceManager.Create;
-begin
-  FFileSources := TFileSources.Create;
-end;
-
-destructor TFileSourceManager.Destroy;
-var
-  i: Integer;
-begin
-  if FFileSources.Count > 0 then
-  begin
-    DCDebug('Warning: Destroying manager with existing file sources!');
-
-    for i := 0 to FFileSources.Count - 1 do
-    begin
-      // Restore the reference taken in TFileSource.Create before removing
-      // all file sources from the list.
-      FFileSources[i]._AddRef;
-      // Free instance.
-      FFileSources.put(i, nil);
-    end;
-  end;
-
-  FreeAndNil(FFileSources);
-
-  inherited Destroy;
-end;
-
-procedure TFileSourceManager.Add(aFileSource: IFileSource);
-begin
-  if FFileSources.IndexOf(aFileSource) < 0 then
-  begin
-    FFileSources.Add(aFileSource);
-  end
-  else
-    DCDebug('Error: File source already exists in manager!');
-end;
-
-procedure TFileSourceManager.Remove(aFileSource: IFileSource);
-begin
-  FFileSources.Remove(aFileSource);
-end;
-
-function TFileSourceManager.Find(FileSourceClass: TClass; Address: String;
-  CaseSensitive: Boolean): IFileSource;
-var
-  I: Integer;
-  StrCmp: function(const S1, S2: String): Integer;
-begin
-  if CaseSensitive then
-    StrCmp:= @CompareStr
-  else begin
-    StrCmp:= @CompareText;
-  end;
-  for I := 0 to FFileSources.Count - 1 do
-  begin
-    if (FFileSources[I].IsClass(FileSourceClass)) and
-       (StrCmp(FFileSources[I].CurrentAddress, Address) = 0) then
-    begin
-      Result := FFileSources[I];
-      Exit;
-    end;
-  end;
-  Result := nil;
-end;
-
 constructor EFileNotFound.Create(const AFilePath: string);
 begin
   FFilePath := AFilePath;
   inherited Create(Format(rsMsgFileNotFound, [aFilePath]));
 end;
-
-initialization
-  FileSourceManager := TFileSourceManager.Create;
-
-finalization
-  FreeAndNil(FileSourceManager);
 
 end.
 

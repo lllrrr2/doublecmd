@@ -3,7 +3,7 @@
    -------------------------------------------------------------------------
    Localization core unit
 
-   Copyright (C) 2007-2020 Alexander Koblov (alexx2000@mail.ru)
+   Copyright (C) 2007-2022 Alexander Koblov (alexx2000@mail.ru)
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -239,6 +239,7 @@ resourcestring
   rsMsgForTextFormatToImport = 'Select the text format to import';
   rsMsgUserDidNotSetExtension = '<NO EXT>';
   rsMsgUserDidNotSetName = '<NO NAME>';
+  rsMsgCommandNotFound = 'Command not found! (%s)';
   rsMsgProblemExecutingCommand = 'Problem executing command (%s)';
   rsMsgCopyBackward = 'The file %s has changed. Do you want to copy it backward?';
   rsMsgCouldNotCopyBackward = 'Could not copy backward - do you want to keep the changed file?';
@@ -363,7 +364,11 @@ resourcestring
   rsMnuEdit = 'Edit';
   rsMnuOpenWith = 'Open with';
   rsMnuOpenWithOther = 'Other...';
-  rsMenuMacOsServices = 'Services';
+  rsMenuMacOSShare = 'Share...';
+  rsMenuMacOSGrantPermissionToSupportFinderTags = 'Grant "Full Disk Access" permission to support Finder Tags...';
+  rsMenuMacOSEditFinderTags = 'Edit Finder Tags...';
+  rsMenuMacOSAddFinderTag = 'Add "%s"';
+  rsMenuMacOSRemoveFinderTag = 'Remove "%s"';
   rsMnuMount = 'Mount';
   rsMnuUmount = 'Unmount';
   rsMnuNoMedia = 'No media available';
@@ -373,10 +378,12 @@ resourcestring
   rsMnuRestore = 'Restore';
   rsMnuPackHere = 'Pack here...';
   rsMnuExtractHere = 'Extract here...';
+  rsOpenWithMacOSFilter = 'Applications (*.app)|*.app|All files (*)|*';
   // for main menu
   rsMnuCreateShortcut = 'Create Shortcut...';
-  rsMnuMapNetworkDrive = 'Map Network Drive...';
   rsMnuDisconnectNetworkDrive = 'Disconnect Network Drive...';
+  // for dock emnu
+  rsMnuNewWindow = 'New Window';
   // for content plugins menu
   rsMnuContentDefault = '<Default>';
   rsMnuContentOctal = 'Octal';
@@ -571,6 +578,7 @@ resourcestring
   rsPropsSymLink = 'Symbolic link';
   rsPropsSocket = 'Socket';
   rsPropsUnknownType = 'Unknown type';
+  rsPropsMultipleTypes = 'Multiple types';
   rsPropsContains = 'Files: %d, folders: %d';
   rsPropsErrChMod = 'Can not change access rights for "%s"';
   rsPropsErrChOwn = 'Can not change owner for "%s"';
@@ -803,7 +811,10 @@ resourcestring
   rsOptConfigTreeState = 'Full expand;Full collapse';
   rsOptDifferFramePosition = 'Active frame panel on left, inactive on right (legacy);Left frame panel on left, right on right';
   //-------------------------------
-
+  rsDarkMode = 'Dark mode';
+  rsDarkModeOptions = 'Auto;Enabled;Disabled';
+  //-------------------------------
+  rsDriveFreeSpaceIndicator = 'Drive Free Space Indicator';
   //-------------------------------
   rsOptEnterExt = 'Enter extension';
   rsOptAssocPluginWith = 'Associate plugin "%s" with:';
@@ -988,6 +999,58 @@ resourcestring
   rsMsgTCisRunning = 'Error! TC is still running but it should be closed for this operation.'+#$0A+'Close it and press OK or press CANCEL to abort.';
   rsMsgAllDCIntCmds = 'All Double Commander internal commands';
 
+  // macOS Modernn Form Sytle
+  rsMFSTBITreeViewTitle = 'TreeView';
+  rsMFSTBITreeViewTips = 'Show Tree View Panel';
+  rsMFSTBIHorzSplitTitle = 'HorzSplit';
+  rsMFSTBIHorzSplitTips = 'Toggle Horizontal Split Mode';
+  rsMFSTBISwapPanelsTitle = 'SwapPanels';
+  rsMFSTBISwapPanelsTips = 'Swap Panels';
+  rsMFSTBIShowModeTitle = 'ShowMode';
+  rsMFSTBIShowModeTips = 'Show as Brief, Full or Thumbnails';
+  rsMFSTBIShowBriefTitle = 'as Brief';
+  rsMFSTBIShowFullTitle = 'as Full';
+  rsMFSTBIShowThumbnailsTitle = 'as Thumbnails';
+  rsMFSTBIShareTitle = 'Share';
+  rsMFSTBIAirDropTitle = 'AirDrop';
+  rsMFSTBIAirDropTips = 'AirDrop';
+  rsMFSTBIQuickLookTitle = 'QuickLook';
+  rsMFSTBIQuickLookTips = 'macOS Quick Look Panel';
+  rsMFSTBIEditFinderTagTitle = 'EditTag';
+  rsMFSTBIEditFinderTagTips = 'Edit Finder Tags...';
+
+  rsMFSTBIGoTitle = 'Go';
+  rsMFSTBIGoTips = 'Go';
+  rsMFSTBIFinderRevealTitle = 'Finder';
+  rsMFSTBIFinderRevealTips = 'Reveal in Finder';
+  rsMFSTBIShowInfoTitle = 'ShowInfo';
+  rsMFSTBIShowInfoTips = 'Show Info in Finder';
+
+  rsMFSTBICommandTitle = 'Command';
+  rsMFSTBICommandMenuDirectoryHotlist = 'Directory Hotlist';
+  rsMFSTBICommandMenuFavoriteTabs = 'Favorite Tabs';
+  rsMFSTBICommandMenuQuickLook = 'macOS QuickLook';
+
+  rsMFSTBISearchTitle = 'Search';
+  rsMFSTBISearchTips  = 'Search Files...';
+  rsMFSTBISearchCombinedTags = 'Search for combined tags...';
+
+  rsMFSTBITerminalTitle = 'Terminal';
+  rsMFSTBITerminalTips  = 'Open in Terminal';
+  rsMFSTBIPrivilegeTitle = 'Privilege';
+  rsMFSTBIPrivilegeTips = 'As a file manager, Double Command requires full disk access permissions. Clicking this button will pop up the macOS system settings page. Please add "Double Commander.app" to the "Full Disk Access" list to complete the authorization.';
+
+  rsMFSTBIRefreshTitle = 'Refresh';
+  rsMFSTBIRefreshTips = 'Refresh File List';
+  rsMFSTBICompareTitle = 'Compare';
+  rsMFSTBICompareTips = 'Compare by Contents...';
+
+  rsMFSTBISyncTitle = 'Sync';
+  rsMFSTBISyncTips = 'Synchronize Dirs...';
+
+  rsMFSTBIEditTitle = 'Edit';
+  rsMFSTBIEditTips = 'Edit...';
+
   //Columns Menu
   rsMenuConfigureCustomColumns= 'Configure custom columns';
   rsMenuConfigureEnterCustomColumnName = 'Enter new custom columns name';
@@ -1102,38 +1165,39 @@ implementation
 
 uses
   Forms, Classes, SysUtils, StrUtils, GetText, Translations, uGlobs, uGlobsPaths,
-  uTranslator, uDebug, uFileProcs, DCOSUtils, DCStrUtils;
+  uTranslator, uDebug, DCClassesUtf8, DCOSUtils, DCStrUtils, StreamEx;
 
-function GetLanguageName(const poFileName : String) : String;
+function GetLanguageName(const poFileName: String): String;
 var
-  sLine : String;
-  poFile : THandle;
-  iPos1, iPos2 : Integer;
+  sLine: String;
+  S, F, Index : Integer;
+  Stream: TFileStreamEx;
+  Reader: TStreamReader;
 begin
-  poFile:= mbFileOpen(poFileName, fmOpenRead);
-  if poFile <> feInvalidHandle then
-  begin
-    // find first msgid line
-    FileReadLn(poFile, sLine);
-    while Pos('msgid', sLine) = 0 do
-      FileReadLn(poFile, sLine);
-    // read msgstr line
-    FileReadLn(poFile, sLine);
-    repeat
-      FileReadLn(poFile, sLine);
-      // find language name line
-      if Pos('X-Native-Language:', sLine) <> 0 then
-      begin
-        iPos1 := Pos(':', sLine) + 2;
-        iPos2 := Pos('\n', sLine) - 1;
-        Result := Copy(sLine, iPos1,  (iPos2 - iPos1) + 1);
-        FileClose(poFile);
-        Exit;
-      end;
-    until Pos('msgid', sLine) = 1;
-    FileClose(poFile);
+  try
+    Stream:= TFileStreamEx.Create(poFileName, fmOpenRead or fmShareDenyNone);
+    try
+      Index:= 0;
+      Reader:= TStreamReader.Create(Stream, BUFFER_SIZE, True);
+      repeat
+        sLine:= Reader.ReadLine;
+        S:= Pos('X-Native-Language', sLine);
+        if S > 0 then
+        begin
+          S:= Pos(':', sLine, S + 17) + 2;
+          F:= Pos('\n', sLine, S) - 1;
+          Result:= Copy(sLine, S,  (F - S) + 1);
+          Exit;
+        end;
+        Inc(Index);
+      until (Reader.Eof or (Index > 256));
+    finally
+      Reader.Free;
+    end;
+  except
+    // Ignore
   end;
-  Result := 'Unknown';
+  Result:= 'Unknown';
 end;
 
 procedure TranslateLCL(poFileName: String);
@@ -1168,32 +1232,38 @@ begin
   end;
 end;
 
-procedure lngLoadLng(const sFileName:String);
+procedure lngLoadLng(const sFileName: String);
+const
+  DEFAULT_PO = 'doublecmd.pot';
 var
   Lang: String = '';
   FallbackLang: String = '';
 begin
-  { Localization }
-  if sFileName = 'doublecmd.po' then Exit;  // default english interface
-
+  // Default english interface
+  if StrBegins(sFileName, 'doublecmd.po') then
+  begin
+    gPOFileName := DEFAULT_PO;
+    Exit;
+  end;
   gPOFileName := sFileName;
   if not mbFileExists(gpLngDir + gPOFileName) then
-    begin
-      gPOFileName := 'doublecmd.%s.po';
-      GetLanguageIDs(Lang, FallbackLang);
-      gPOFileName := Format(gPOFileName,[FallbackLang]);
-    end;
+  begin
+    gPOFileName := 'doublecmd.%s.po';
+    GetLanguageIDs(Lang, FallbackLang);
+    gPOFileName := Format(gPOFileName,[FallbackLang]);
+  end;
   if not mbFileExists(gpLngDir + gPOFileName) then
-    begin
-      gPOFileName := Format(gPOFileName,[Lang]);
-    end;
-  if mbFileExists(gpLngDir + gPOFileName) then
-    begin
-      DCDebug('Loading lng file: ' + gpLngDir + gPOFileName);
-      LRSTranslator := TTranslator.Create(gpLngDir + gPOFileName);
-      Translations.TranslateResourceStrings(gpLngDir + gPOFileName);
-      TranslateLCL(gPOFileName);
-    end;
+  begin
+    gPOFileName := Format(gPOFileName,[Lang]);
+  end;
+  if not mbFileExists(gpLngDir + gPOFileName) then
+    gPOFileName := DEFAULT_PO
+  else begin
+    DCDebug('Loading lng file: ' + gpLngDir + gPOFileName);
+    LRSTranslator := TTranslator.Create(gpLngDir + gPOFileName);
+    Translations.TranslateResourceStrings(TTranslator(LRSTranslator).POFile);
+    TranslateLCL(gPOFileName);
+  end;
 end;
 
 procedure DoLoadLng;
@@ -1202,7 +1272,6 @@ begin
 end;
 
 finalization
-  if Assigned(LRSTranslator) then
-    FreeAndNil(LRSTranslator);
+  FreeAndNil(LRSTranslator);
 
 end.

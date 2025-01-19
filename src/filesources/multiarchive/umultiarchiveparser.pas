@@ -41,6 +41,7 @@ type
     procedure Prepare; virtual; abstract;
     procedure ParseLines; virtual; abstract;
     procedure AddLine(const Str: String); virtual; abstract;
+    function CleanSize(Str: String): String;
     property OnGetArchiveItem: TOnGetArchiveItem write FOnGetArchiveItem;
   end;
 
@@ -60,7 +61,8 @@ type
     FHourModifierPos,
     FMinPos,
     FSecPos,
-    FAttrPos: TKeyPos;
+    FAttrPos,
+    FCmtPos: TKeyPos;
   private
     FFormatIndex: Integer;
   private
@@ -238,6 +240,7 @@ begin
   KeyPos('m', FMinPos);
   KeyPos('s', FSecPos);
   KeyPos('a', FAttrPos);
+  KeyPos('c', FCmtPos);
 end;
 
 procedure TMultiArchiveStaticParser.ParseLines;
@@ -245,20 +248,38 @@ begin
 
 end;
 
+function TMultiArchiveParser.CleanSize(Str: String): String;
+var
+  I: Integer;
+  Size: String;
+begin
+  Size:= Trim(Str);
+  if FMultiArcItem.FSizeStripChars <> EmptyStr then
+  begin
+    for I:= 1 to Length(FMultiArcItem.FSizeStripChars) do
+      Size:= Size.Replace(FMultiArcItem.FSizeStripChars[I], '');
+  end;
+  Result:= Size;
+end;
+
 procedure TMultiArchiveStaticParser.AddLine(const Str: String);
 begin
   // if next item
   if FFormatIndex = 0 then
+  begin
     FArchiveItem := TArchiveItem.Create;
+    FArchiveItem.PackSize := -1;
+    FArchiveItem.UnpSize := -1;
+  end;
   // get all file properties
   if FExtPos.Index = FFormatIndex then
     FArchiveItem.FileExt := FGetFileName(Trim(GetKeyValue(str, FExtPos)));
   if FNamePos.Index = FFormatIndex then
     FArchiveItem.FileName := FGetFileName(Trim(GetKeyValue(str, FNamePos)));
   if FUnpSizePos.Index = FFormatIndex then
-    FArchiveItem.UnpSize := StrToInt64Def(Trim(GetKeyValue(str, FUnpSizePos)), 0);
+    FArchiveItem.UnpSize := StrToInt64Def(CleanSize(GetKeyValue(str, FUnpSizePos)), -1);
   if FPackSizePos.Index = FFormatIndex then
-    FArchiveItem.PackSize := StrToInt64Def(Trim(GetKeyValue(str, FPackSizePos)), 0);
+    FArchiveItem.PackSize := StrToInt64Def(CleanSize(GetKeyValue(str, FPackSizePos)), -1);
   if FYearPos.Index = FFormatIndex then
     FArchiveItem.Year := YearShortToLong(StrToIntDef(Trim(GetKeyValue(str, FYearPos)), 0));
   if FMonthPos.Index = FFormatIndex then
@@ -277,6 +298,8 @@ begin
     FArchiveItem.Second := StrToIntDef(Trim(GetKeyValue(str, FSecPos)), 0);
   if FAttrPos.Index = FFormatIndex then
     FArchiveItem.Attributes := FGetFileAttr(GetKeyValue(str, FAttrPos));
+  if FCmtPos.Index = FFormatIndex then
+    FArchiveItem.Comment := Trim(GetKeyValue(str, FCmtPos));
 
   FFormatIndex := FFormatIndex + 1;
   if FFormatIndex >= FMultiArcItem.FFormat.Count then

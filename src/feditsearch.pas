@@ -111,6 +111,7 @@ begin
       cbSearchFromCursor.Enabled := ((eswoSearchFromCursorChecked in OptionAllowed) OR (eswoSearchFromCursorUnchecked in OptionAllowed));
       cbSearchRegExp.Enabled := ((eswoRegularExpressChecked in OptionAllowed) OR (eswoRegularExpressUnchecked in OptionAllowed));
       rgSearchDirection.Enabled := ((eswoDirectionEnabledForward in OptionAllowed) OR (eswoDirectionEnabledBackward in OptionAllowed));
+      cbMultiLine.Enabled := cbSearchRegExp.Enabled;
 
       //2. Let's set the option to their default according to what host wants to offer
       cbSearchCaseSensitive.Checked := (eswoCaseSensitiveChecked in OptionAllowed);
@@ -212,7 +213,8 @@ begin
     if AEditor.SelAvail and (AEditor.BlockBegin.Y = AEditor.BlockEnd.Y) then
       Options.SearchText := AEditor.SelText
     else begin
-      Options.SearchText := AEditor.GetWordAtRowCol(AEditor.CaretXY);
+      if gEditorFindWordAtCursor then
+        Options.SearchText := AEditor.GetWordAtRowCol(AEditor.CaretXY);
     end;
 
     cbSearchText.Items.Text := glsSearchHistory.Text;
@@ -224,6 +226,7 @@ begin
     if ShowModal = mrOK then
     begin
       AOptions := SearchOptions;
+      AReplace := lblReplaceWith.State;
       glsSearchHistory.Assign(cbSearchText.Items);
       glsReplaceHistory.Assign(cbReplaceText.Items);
       if AOptions.SearchText <> '' then

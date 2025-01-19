@@ -5,7 +5,7 @@
    (TC WDX-API v1.5)
 
    Copyright (C) 2008  Dmitry Kolomiets (B4rr4cuda@rambler.ru)
-   Copyright (C) 2008-2022 Alexander Koblov (alexx2000@mail.ru)
+   Copyright (C) 2008-2024 Alexander Koblov (alexx2000@mail.ru)
 
    Some ideas were found in sources of WdxGuide by Alexey Torgashin
    and SuperWDX by Pavel Dubrovsky and Dmitry Vorotilin.
@@ -36,7 +36,8 @@ uses
   Classes, SysUtils, dynlibs,
 
   //DC
-  uLng, uWdxPrototypes, WdxPlugin, uDetectStr, lua, uFile, DCXmlConfig;
+  uLng, uWdxPrototypes, WdxPlugin, uDetectStr, lua, uFile, DCXmlConfig,
+  uExtension;
 
 const
   WDX_MAX_LEN = 2048;
@@ -59,7 +60,7 @@ type
 
   { TWDXModule }
 
-  TWDXModule = class
+  TWDXModule = class(TDcxModule)
   private
     FFieldsList: TStringList;
     FParser:     TParserControl;
@@ -116,7 +117,6 @@ type
 
   TPluginWDX = class(TWDXModule)
   protected
-    FModuleHandle: TLibHandle;  // Handle to .DLL or .so
     FForce:     Boolean;
     FName:      String;
   protected
@@ -212,12 +212,10 @@ type
   protected
     function GetAName: String; override;
     function GetAFileName: String; override;
-    function GetADetectStr: String; override;
     procedure SetAName({%H-}AValue: String); override;
     procedure SetAFileName({%H-}AValue: String); override;
-    procedure SetADetectStr(const {%H-}AValue: String); override;
   protected
-    procedure AddField(const AName: String; AType: Integer);
+    procedure AddField(const AName, XName: String; AType: Integer);
   public
     //---------------------
     constructor Create; override;
@@ -226,6 +224,7 @@ type
     procedure UnloadModule; override;
     function IsLoaded: Boolean; override;
     //---------------------
+    function GetFieldIndex(FieldName: String): Integer; override;
   end;
 
   { TWDXModuleList }
@@ -289,25 +288,39 @@ type
 // Double Commander <-> Total Commander
 
 const
-  WdxLangTable: array[0..16, 0..1] of String =
+  WdxLangTable: array[0..30, 0..1] of String =
   (
-   ('zh_CN', 'CHN'),
-   ('cs',    'CZ' ),
-   ('da',    'DAN'),
-   ('de',    'DEU'),
-   ('nl',    'DUT'),
-   ('es',    'ESP'),
-   ('fr',    'FRA'),
-   ('hu',    'HUN'),
-   ('it',    'ITA'),
-   ('ko',    'KOR'),
-   ('nb',    'NOR'),
-   ('pl',    'POL'),
-   ('ro',    'ROM'),
-   ('ru',    'RUS'),
-   ('sk',    'SK' ),
-   ('sl',    'SVN'),
-   ('sv',    'SWE')
+   ('be',       'BEL'),
+   ('bg',       'BUL'),
+   ('ca',       'CAT'),
+   ('zh_CN',    'CHN'),
+   ('cs',       'CZ' ),
+   ('da',       'DAN'),
+   ('de',       'DEU'),
+   ('nl',       'DUT'),
+   ('el',       'ELL'),
+   ('es',       'ESP'),
+   ('fr',       'FRA'),
+   ('hr',       'HR' ),
+   ('hu',       'HUN'),
+   ('it',       'ITA'),
+   ('ja',       'JPN'),
+   ('ko',       'KOR'),
+   ('nb',       'NOR'),
+   ('nn',       'NOR'),
+   ('pl',       'POL'),
+   ('pt',       'POR'),
+   ('pt_BR',    'PTG'),
+   ('ro',       'ROM'),
+   ('ru',       'RUS'),
+   ('sk',       'SK' ),
+   ('sr',       'SRB'),
+   ('sr@latin', 'SRL'),
+   ('sl',       'SVN'),
+   ('sv',       'SWE'),
+   ('tr',       'TUR'),
+   ('zh_TW',    'TW' ),
+   ('uk',       'UKR')
   );
 
 function GetWdxLang(const Code: String): String;
@@ -773,6 +786,7 @@ function TPluginWDX.CallContentGetValueV(FileName: String; FieldIndex,
   UnitIndex: Integer; flags: Integer): Variant;
 var
   Rez: Integer;
+  ATime: TDateTime;
   Buf: array[0..WDX_MAX_LEN] of Byte;
   fnval: Integer absolute buf;
   fnval64: Int64 absolute buf;
@@ -793,8 +807,20 @@ begin
       ft_numeric_32: Result := fnval;
       ft_numeric_64: Result := fnval64;
       ft_numeric_floating: Result := ffval;
-      ft_date: Result := EncodeDate(fdate.wYear, fdate.wMonth, fdate.wDay);
-      ft_time: Result := EncodeTime(ftime.wHour, ftime.wMinute, ftime.wSecond, 0);
+      ft_date:
+        begin
+          if TryEncodeDate(fdate.wYear, fdate.wMonth, fdate.wDay, ATime) then
+            Result := ATime
+          else
+            Result := Unassigned;
+        end;
+      ft_time:
+        begin
+          if TryEncodeTime(ftime.wHour, ftime.wMinute, ftime.wSecond, 0, ATime) then
+            Result := ATime
+          else
+            Result := Unassigned;
+        end;
       ft_datetime: Result :=  WinFileTimeToDateTime(wtime);
       ft_boolean: Result := Boolean(fnval);
 
@@ -1241,11 +1267,6 @@ begin
   Result:= ParamStrUTF8(0);
 end;
 
-function TEmbeddedWDX.GetADetectStr: String;
-begin
-  Result:= EmptyStr;
-end;
-
 procedure TEmbeddedWDX.SetAName(AValue: String);
 begin
 
@@ -1256,12 +1277,7 @@ begin
 
 end;
 
-procedure TEmbeddedWDX.SetADetectStr(const AValue: String);
-begin
-
-end;
-
-procedure TEmbeddedWDX.AddField(const AName: String; AType: Integer);
+procedure TEmbeddedWDX.AddField(const AName, XName: String; AType: Integer);
 var
   I: Integer;
 begin
@@ -1269,7 +1285,7 @@ begin
   with TWdxField(FFieldsList.Objects[I]) do
   begin
     FName := AName;
-    LName := FName;
+    LName := XName;
     FType := AType;
   end;
 end;
@@ -1293,6 +1309,21 @@ end;
 function TEmbeddedWDX.IsLoaded: Boolean;
 begin
   Result:= True;
+end;
+
+function TEmbeddedWDX.GetFieldIndex(FieldName: String): Integer;
+var
+  Index: Integer;
+begin
+  Result:= inherited GetFieldIndex(FieldName);
+  if Result < 0 then
+  begin
+    for Index:= 0 to FFieldsList.Count - 1 do
+    begin
+      if AnsiSameText(FieldName, TWdxField(FFieldsList.Objects[Index]).LName) then
+        Exit(Index);
+    end;
+  end;
 end;
 
 { TWDXModule }

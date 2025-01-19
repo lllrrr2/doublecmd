@@ -173,7 +173,6 @@ type
     btnExport: TBitBtn;
     btnImport: TBitBtn;
     btnBackup: TBitBtn;
-    btnHelp: TBitBtn;
     pnlBottom: TPanel;
     rgWhereToAdd: TRadioGroup;
     gbHotlistOtherOptions: TGroupBox;
@@ -216,7 +215,6 @@ type
     procedure miImportFromAnythingClick(Sender: TObject);
     procedure miGotoConfigureTCInfoClick(Sender: TObject);
     procedure btnActionClick(Sender: TObject);
-    procedure btnHelpClick(Sender: TObject);
     procedure cbFullExpandTreeChange(Sender: TObject);
     procedure lbleditHotDirNameChange(Sender: TObject);
     procedure anyRelativeAbsolutePathClick(Sender: TObject);
@@ -299,7 +297,7 @@ begin
   ParseLineToList(rsOptAddFromMainPanel, rgWhereToAdd.Items);
   ParseLineToList(rsHotDirForceSortingOrderChoices, cbSortHotDirPath.Items);
   ParseLineToList(rsHotDirForceSortingOrderChoices, cbSortHotDirTarget.Items);
-  OpenDialog.Filter := ParseLineToFileFilter([rsFilterDirectoryHotListFiles, '*.hotlist', rsFilterXmlConfigFiles, '*.xml', rsFilterAnyFiles, '*.*']);
+  OpenDialog.Filter := ParseLineToFileFilter([rsFilterDirectoryHotListFiles, '*.hotlist', rsFilterXmlConfigFiles, '*.xml', rsFilterAnyFiles, AllFilesMask]);
   SaveDialog.Filter := ParseLineToFileFilter([rsFilterDirectoryHotListFiles, '*.hotlist']);
 end;
 
@@ -795,7 +793,7 @@ var
 
   function ReplaceIfNecessary(sWorkingText: string): string;
   begin
-    Result := StringReplace(sWorkingText, sSearchText, sReplaceText, ReplaceFlags);
+    Result := UTF8StringReplace(sWorkingText, sSearchText, sReplaceText, ReplaceFlags);
     if Result <> sWorkingText then Inc(NbOfReplacement);
   end;
 
@@ -803,6 +801,7 @@ var
   Index, ActionDispatcher: integer;
   EditSearchOptionToOffer: TEditSearchDialogOption;
   EditSearchOptionReturned: TEditSearchDialogOption = [];
+  CaseSensitive: array[Boolean] of TEditSearchDialogOption = ([eswoCaseSensitiveUnchecked], [eswoCaseSensitiveChecked]);
 begin
   with Sender as TComponent do ActionDispatcher := tag;
 
@@ -811,12 +810,7 @@ begin
   else sSearchText := '';
   sReplaceText := sSearchText;
 
-  EditSearchOptionToOffer := [];
-  {$IFDEF MSWINDOWS}
-  EditSearchOptionToOffer := EditSearchOptionToOffer + [eswoCaseSensitiveUnchecked];
-  {$ELSE}
-  EditSearchOptionToOffer := EditSearchOptionToOffer + [eswoCaseSensitiveChecked];
-  {$ENDIF}
+  EditSearchOptionToOffer := CaseSensitive[FileNameCaseSensitive];
 
   if GetSimpleSearchAndReplaceString(self, EditSearchOptionToOffer, sSearchText, sReplaceText, EditSearchOptionReturned, glsSearchPathHistory, glsReplacePathHistory) then
   begin
@@ -1324,12 +1318,6 @@ begin
     7: pmMiscellaneousDirectoryHotlist.PopUp(Mouse.CursorPos.X, Mouse.CursorPos.Y);
     8: pmSortDirectoryHotlist.PopUp(Mouse.CursorPos.X, Mouse.CursorPos.Y);
   end;
-end;
-
-{ TfrmOptionsDirectoryHotlist.btnHelpClick }
-procedure TfrmOptionsDirectoryHotlist.btnHelpClick(Sender: TObject);
-begin
-  ShowHelpOrErrorForKeyword('', '/directoryhotlist.html');
 end;
 
 { TfrmOptionsDirectoryHotlist.cbFullExpandTreeChange }
@@ -1953,7 +1941,6 @@ procedure TfrmOptionsDirectoryHotlist.RefreshExistingProperty(ScanMode: integer)
 var
   Index, LocalThreadCount: longint;
   ListOfAlreadyCheckDrive, ListOfNonExistingDrive: TStringList;
-  RememberCursor: TCursor;
   FreezeTime: dword;
 
   procedure StartThreadToSeeIfThisDriveExists(const sDrive: string);
@@ -2026,11 +2013,10 @@ var
   end;
 
 begin
-  RememberCursor := Screen.Cursor;
   SetNormalIconsInTreeView;
 
   try
-    Screen.Cursor := crHourGlass;
+    Screen.BeginWaitCursor;
 
     ListOfAlreadyCheckDrive := TStringList.Create;
     ListOfAlreadyCheckDrive.Sorted := False;
@@ -2100,7 +2086,7 @@ begin
     end;
 
   finally
-    Screen.Cursor := RememberCursor;
+    Screen.EndWaitCursor;
   end;
 
   tvDirectoryHotlist.Refresh;

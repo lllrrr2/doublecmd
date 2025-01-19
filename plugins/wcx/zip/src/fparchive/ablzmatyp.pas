@@ -85,6 +85,7 @@ type
     procedure LoadArchive; override;
     procedure SaveArchive; override;
     procedure TestItemAt(Index : Integer); override;
+    function GetStreamMode : Boolean; override;
     function GetSupportsEmptyFolders : Boolean; override;
 
   public {methods}
@@ -331,7 +332,7 @@ begin
     if UpdateArchive then
     begin
       FreeAndNil(FLzmaStream);
-      TempFileName := GetTempName(FArchiveName + ExtensionSeparator);
+      TempFileName := GetTempName(FArchiveName);
       { Create new archive with temporary name }
       FLzmaStream := TFileStreamEx.Create(TempFileName, fmCreate or fmShareDenyWrite);
     end;
@@ -447,6 +448,11 @@ begin
       BitBucket.Free;
     end;
   end;
+end;
+{ -------------------------------------------------------------------------- }
+function TAbLzmaArchive.GetStreamMode: Boolean;
+begin
+  Result := False;
 end;
 { -------------------------------------------------------------------------- }
 procedure TAbLzmaArchive.DoSpanningMediaRequest(Sender: TObject;

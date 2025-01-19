@@ -3,7 +3,7 @@
    -------------------------------------------------------------------------
    Quick view panel
 
-   Copyright (C) 2009-2022 Alexander Koblov (alexx2000@mail.ru)
+   Copyright (C) 2009-2024 Alexander Koblov (alexx2000@mail.ru)
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@ unit uQuickViewPanel;
 interface
 
 uses
-  Classes, SysUtils, ExtCtrls, fViewer,
+  Classes, SysUtils, Controls, ExtCtrls, fViewer,
   uFileViewNotebook, uFile, uFileSource, uFileView;
 
 type
@@ -41,12 +41,20 @@ type
     FFileSource: IFileSource;
     FViewer: TfrmViewer;
     FFileName: String;
+    FTempFileSource: IFileSource;
+    FLastFocusedControl: TWinControl;
   private
-    procedure RaiseExit;
     procedure LoadFile(const aFileName: String);
     procedure OnChangeFileView(Sender: TObject);
     procedure CreateViewer(aFileView: TFileView);
     procedure FileViewChangeActiveFile(Sender: TFileView; const aFile : TFile);
+
+    function handleLinksToLocal( const Sender:TFileView; const aFile:TFile; var fullPath:String; var showMsg:String ): Boolean;
+    function handleNotDirect( const Sender:TFileView; const aFile:TFile; var fullPath:String; var showMsg:String ): TDuplicates;
+    function handleDirect( const Sender:TFileView; const aFile:TFile; var fullPath:String; var showMsg:String ): Boolean;
+    procedure PrepareView(const aFile: TFile; var FileName: String);
+  protected
+     procedure DoOnShowHint(HintInfo: PHintInfo) override;
   public
     constructor Create(TheOwner: TComponent; aParent: TFileViewPage); reintroduce;
     destructor Destroy; override;
@@ -61,31 +69,45 @@ var
 implementation
 
 uses
-  LCLProc, Forms, Controls, fMain, uTempFileSystemFileSource, uLng,
-  uFileSourceProperty, uFileSourceOperation, uFileSourceOperationTypes;
+  LCLProc, Forms, DCOSUtils, DCStrUtils, fMain, uTempFileSystemFileSource, uLng,
+  uFileSourceProperty, uFileSourceOperation, uFileSourceOperationTypes,
+  uGlobs, uShellExecute;
 
 procedure QuickViewShow(aFileViewPage: TFileViewPage; aFileView: TFileView);
 var
-  aFile: TFile = nil;
+  aFile: TFile;
 begin
-  QuickViewPanel:= TQuickViewPanel.Create(Application, aFileViewPage);
-  QuickViewPanel.CreateViewer(aFileView);
-  aFile := aFileView.CloneActiveFile;
+  frmMain.actQuickView.Enabled:= False;
   try
-    QuickViewPanel.FileViewChangeActiveFile(aFileView, aFile);
+    QuickViewPanel:= TQuickViewPanel.Create(Application, aFileViewPage);
+    QuickViewPanel.CreateViewer(aFileView);
+    aFile := aFileView.CloneActiveFile;
+    try
+      QuickViewPanel.FileViewChangeActiveFile(aFileView, aFile);
+    finally
+      FreeAndNil(aFile);
+    end;
   finally
-    FreeAndNil(aFile);
+    frmMain.actQuickView.Enabled:= True;
+    frmMain.actQuickView.Checked:= True;
   end;
-  frmMain.actQuickView.Checked:= True;
 end;
 
 procedure QuickViewClose;
 begin
-  FreeAndNil(QuickViewPanel);
-  frmMain.actQuickView.Checked:= False;
+  if Assigned(QuickViewPanel) then
+  begin
+    FreeAndNil(QuickViewPanel);
+    frmMain.actQuickView.Checked:= False;
+  end;
 end;
 
 { TQuickViewPanel }
+
+procedure TQuickViewPanel.DoOnShowHint(HintInfo: PHintInfo);
+begin
+  HintInfo^.HintStr:= '';
+end;
 
 constructor TQuickViewPanel.Create(TheOwner: TComponent; aParent: TFileViewPage);
 begin
@@ -103,7 +125,7 @@ begin
   TFileViewPage(FFileView.NotebookPage).OnChangeFileView:= nil;
   FViewer.ExitQuickView;
   FFileViewPage.FileView.Visible:= True;
-  FreeThenNil(FViewer);
+  FreeAndNil(FViewer);
   FFileSource:= nil;
   FFileView.SetFocus;
   inherited Destroy;
@@ -113,6 +135,7 @@ procedure TQuickViewPanel.CreateViewer(aFileView: TFileView);
 begin
   FViewer:= TfrmViewer.Create(Self, nil, True);
   FViewer.Parent:= Self;
+  FViewer.ShowHint:= false;
   FViewer.BorderStyle:= bsNone;
   FViewer.Align:= alClient;
   FFirstFile:= True;
@@ -120,12 +143,8 @@ begin
   FFileSource:= aFileView.FileSource;
   FFileViewPage.FileView.Visible:= False;
   FFileView.OnChangeActiveFile:= @FileViewChangeActiveFile;
+  with ClientRect do FViewer.SetBounds(Left, Top, Width, Height);
   TFileViewPage(FFileView.NotebookPage).OnChangeFileView:= @OnChangeFileView;
-end;
-
-procedure TQuickViewPanel.RaiseExit;
-begin
-  raise EAbort.Create(rsSimpleWordFailedExcla);
 end;
 
 procedure TQuickViewPanel.LoadFile(const aFileName: String);
@@ -141,7 +160,10 @@ begin
     FViewer.Show;
   end;
   // Viewer can steal focus, so restore it
-  if not FFileView.Focused then FFileView.SetFocus;
+  if Assigned(FLastFocusedControl) then
+    FLastFocusedControl.SetFocus
+  else if not FFileView.Focused then
+    FFileView.SetFocus;
 end;
 
 procedure TQuickViewPanel.OnChangeFileView(Sender: TObject);
@@ -152,77 +174,180 @@ end;
 
 procedure TQuickViewPanel.FileViewChangeActiveFile(Sender: TFileView; const aFile: TFile);
 var
+  fullPath: String;
+  showMsg: String;
+begin
+  fullPath:= EmptyStr;
+  showMsg:= EmptyStr;
+  FLastFocusedControl:= TCustomForm(Self.GetTopParent).ActiveControl;
+  try
+    if not Assigned(aFile) then
+      raise EAbort.Create(rsMsgErrNotSupported);
+
+    if not handleLinksToLocal(Sender, aFile, fullPath, showMsg) then
+    begin
+      case handleNotDirect(Sender, aFile, fullPath, showMsg) of
+        dupError: handleDirect(Sender, aFile, fullPath, showMsg);
+        dupIgnore: Exit;
+      end;
+    end;
+
+    if fullPath.IsEmpty() and ShowMsg.IsEmpty() then
+      showMsg:= rsMsgErrNotSupported;
+  except
+    on E: EAbort do
+    begin
+      showMsg:= E.Message;
+    end;
+  end;
+
+  if not fullPath.IsEmpty() then
+  begin
+    PrepareView(aFile, fullPath);
+    LoadFile( fullPath );
+  end else begin
+    FViewer.Hide;
+    FFirstFile:= True;
+    Caption:= showMsg;
+    FViewer.LoadFile(EmptyStr);
+  end;
+end;
+
+// return true if it should handle it, otherwise return false
+// If files are links to local files
+// for example: results from searching
+function TQuickViewPanel.handleLinksToLocal( const Sender:TFileView; const aFile:TFile; var fullPath:String; var showMsg:String ): Boolean;
+var
+  ActiveFile: TFile = nil;
+begin
+  if not (fspLinksToLocalFiles in Sender.FileSource.Properties) then exit(false);
+  Result:= true;
+  if not aFile.IsNameValid then exit;
+
+  FFileSource := Sender.FileSource;
+  ActiveFile:= aFile.Clone;
+
+  try
+    if not FFileSource.GetLocalName(ActiveFile) then exit;
+    fullPath:= ActiveFile.FullPath;
+  finally
+    FreeAndNil(ActiveFile);
+  end;
+end;
+
+// return true if it should handle it, otherwise return false
+// If files not directly accessible copy them to temp file source.
+// for examples: ftp
+function TQuickViewPanel.handleNotDirect(const Sender: TFileView; const aFile: TFile; var fullPath: String; var showMsg: String): TDuplicates;
+var
   ActiveFile: TFile = nil;
   TempFiles: TFiles = nil;
   Operation: TFileSourceOperation = nil;
   TempFileSource: ITempFileSystemFileSource = nil;
 begin
+  if (fspDirectAccess in Sender.FileSource.Properties) then
+    Exit(dupError);
+
+  if mbCompareFileNames(FFileName, aFile.FullPath) then
+    Exit(dupIgnore);
+
+  Result:= dupAccept;
+  FFileName:= aFile.FullPath;
+
+  if aFile.IsDirectory or aFile.IsLinkToDirectory then exit;
+  if not (fsoCopyOut in Sender.FileSource.GetOperationsTypes) then exit;
+
+  ActiveFile:= aFile.Clone;
+  TempFiles:= TFiles.Create(ActiveFile.Path);
+  TempFiles.Add(aFile.Clone);
+
   try
-    if not (Assigned(aFile) and aFile.IsNameValid) then
-      raise EAbort.Create(rsMsgErrNotSupported);
+    if FFileSource.IsClass(TTempFileSystemFileSource) then
+      TempFileSource := (FFileSource as ITempFileSystemFileSource)
+    else
+      TempFileSource := TTempFileSystemFileSource.GetFileSource;
 
+    Operation := Sender.FileSource.CreateCopyOutOperation(
+                     TempFileSource,
+                     TempFiles,
+                     TempFileSource.FileSystemRoot);
+
+    if not Assigned(Operation) then exit;
+
+    Sender.Enabled:= False;
     try
-      // If files are links to local files
-      if (fspLinksToLocalFiles in Sender.FileSource.Properties) then
-      begin
-        if aFile.IsDirectory or aFile.IsLinkToDirectory then RaiseExit;
-        FFileSource := Sender.FileSource;
-        ActiveFile:= aFile.Clone;
-        if not FFileSource.GetLocalName(ActiveFile) then RaiseExit;
-      end
-      // If files not directly accessible copy them to temp file source.
-      else if not (fspDirectAccess in Sender.FileSource.Properties) then
-      begin
-        if aFile.IsDirectory or SameText(FFileName, aFile.Name) then RaiseExit;
-        if not (fsoCopyOut in Sender.FileSource.GetOperationsTypes) then RaiseExit;
-
-        ActiveFile:= aFile.Clone;
-        TempFiles:= TFiles.Create(ActiveFile.Path);
-        TempFiles.Add(aFile.Clone);
-
-        if FFileSource.IsClass(TTempFileSystemFileSource) then
-          TempFileSource := (FFileSource as ITempFileSystemFileSource)
-        else
-          TempFileSource := TTempFileSystemFileSource.GetFileSource;
-
-        Operation := Sender.FileSource.CreateCopyOutOperation(
-                         TempFileSource,
-                         TempFiles,
-                         TempFileSource.FileSystemRoot);
-
-        if not Assigned(Operation) then RaiseExit;
-
-        Sender.Enabled:= False;
-        try
-          Operation.Execute;
-        finally
-          FreeAndNil(Operation);
-          Sender.Enabled:= True;
-        end;
-
-        FFileName:= ActiveFile.Name;
-        FFileSource := TempFileSource;
-        ActiveFile.Path:= TempFileSource.FileSystemRoot;
-      end
-      else begin
-        // We can use the file source directly.
-        FFileSource := Sender.FileSource;
-        ActiveFile:= aFile.Clone;
-      end;
-
-      LoadFile(ActiveFile.FullPath);
-
+      Operation.Execute;
     finally
-      FreeAndNil(TempFiles);
-      FreeAndNil(ActiveFile);
+      FreeAndNil(Operation);
+      Sender.Enabled:= True;
     end;
-  except
-    on E: EAbort do
+
+    FFileSource := TempFileSource;
+    ActiveFile.Path:= TempFileSource.FileSystemRoot;
+    fullPath:= ActiveFile.FullPath;
+  finally
+    FreeAndNil(TempFiles);
+    FreeAndNil(ActiveFile);
+  end;
+end;
+
+// return true if it should handle it, otherwise return false
+// for examples: file system
+function TQuickViewPanel.handleDirect( const Sender:TFileView; const aFile:TFile; var fullPath:String; var showMsg:String ): Boolean;
+var
+  parentDir: String;
+begin
+  Result:= true;
+  FFileSource:= Sender.FileSource;
+
+  if aFile.IsNameValid then begin
+    fullPath:= aFile.FullPath;
+  end else begin
+    parentDir:= FFileSource.GetParentDir( aFile.Path );
+    if FFileSource.IsPathAtRoot(parentDir) then
+      showMsg:= rsPropsFolder + ': ' + parentDir
+    else
+      fullPath:= ExcludeTrailingBackslash(parentDir);
+  end;
+end;
+
+procedure TQuickViewPanel.PrepareView(const aFile: TFile; var FileName: String);
+var
+  ATemp: TFile;
+  sCmd: string = '';
+  sParams: string = '';
+  sStartPath: string = '';
+  bAbortOperationFlag: Boolean = False;
+  bShowCommandLinePriorToExecute: Boolean = False;
+begin
+  // Try to find 'view' command in the internal associations
+  if gExts.GetExtActionCmd(aFile, 'view', sCmd, sParams, sStartPath) then
+  begin
+    // Internal viewer command
+    if sCmd = '{!DC-VIEWER}' then
     begin
-      FViewer.Hide;
-      FFirstFile:= True;
-      Caption:= E.Message;
-      FViewer.LoadFile(EmptyStr);
+      ATemp:= AFile.Clone;
+      try
+        ATemp.FullPath:= FileName;
+        sParams:= PrepareParameter(sParams, ATemp, [], @bShowCommandLinePriorToExecute, nil, nil, @bAbortOperationFlag);
+      finally
+        ATemp.Free;
+      end;
+      if not bAbortOperationFlag then
+      begin
+        if StrBegins(sParams, '<?') and (StrEnds(sParams, '?>')) then
+        begin
+          if (FTempFileSource = nil) then
+          begin
+            if FFileSource is TTempFileSystemFileSource then
+              FTempFileSource:= FFileSource
+            else
+              FTempFileSource:= TTempFileSystemFileSource.GetFileSource;
+          end;
+          PrepareOutput(sParams, sStartPath, FTempFileSource.GetRootDir);
+          if mbFileExists(sParams) then FileName:= sParams;
+        end;
+      end;
     end;
   end;
 end;

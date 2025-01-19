@@ -35,6 +35,8 @@ type
 
   TOnLoadToolItem = procedure (Item: TKASToolItem) of object;
 
+  TKASSeparatorStyle = (kssSeparator, kssDivider, kssLineBreak);
+
   {$interfaces corba}
   IToolOwner = interface
     ['{A7908D38-1E13-4E8D-8FA7-8830A2FF9290}']
@@ -62,6 +64,7 @@ type
     FAction: TBasicAction;
     property ToolOwner: IToolOwner read FToolOwner;
   public
+    function ActionHint: Boolean; virtual;
     procedure Assign(OtherItem: TKASToolItem); virtual;
     function CheckExecute(ToolItemID: String): Boolean; virtual;
     function Clone: TKASToolItem; virtual; abstract;
@@ -81,7 +84,7 @@ type
 
   TKASSeparatorItem = class(TKASToolItem)
   public
-    Style: Boolean;
+    Style: TKASSeparatorStyle;
     procedure Assign(OtherItem: TKASToolItem); override;
     function Clone: TKASToolItem; override;
     function ConfigNodeName: String; override;
@@ -94,6 +97,8 @@ type
   { TKASNormalItem }
 
   TKASNormalItem = class(TKASToolItem)
+  private
+    FShortcutsHint: Boolean;
   strict private
     FID: String;            // Unique identificator of the button
     function GetID: String;
@@ -105,6 +110,7 @@ type
     Icon: String;
     Text: String;
     Hint: String;
+    function ActionHint: Boolean; override;
     procedure Assign(OtherItem: TKASToolItem); override;
     function CheckExecute(ToolItemID: String): Boolean; override;
     function Clone: TKASToolItem; override;
@@ -182,6 +188,11 @@ uses
   DCStrUtils;
 
 { TKASToolItem }
+
+function TKASToolItem.ActionHint: Boolean;
+begin
+  Result := True;
+end;
 
 procedure TKASToolItem.Assign(OtherItem: TKASToolItem);
 begin
@@ -404,13 +415,20 @@ begin
 end;
 
 procedure TKASSeparatorItem.Load(Config: TXmlConfig; Node: TXmlNode; Loader: TKASToolBarLoader);
+var
+  OldStyle: Boolean;
+  AStyle: array[Boolean] of TKASSeparatorStyle = (kssSeparator, kssDivider);
 begin
-  Style := Config.GetValue(Node, 'Style', False);
+  if Config.TryGetValue(Node, 'Style', OldStyle) then
+    Style := AStyle[OldStyle]
+  else begin
+    Style := TKASSeparatorStyle(Config.GetValue(Node, 'Style', Integer(kssSeparator)));
+  end;
 end;
 
 procedure TKASSeparatorItem.SaveContents(Config: TXmlConfig; Node: TXmlNode);
 begin
-  Config.AddValue(Node, 'Style', Style);
+  Config.AddValue(Node, 'Style', Integer(Style));
 end;
 
 { TKASNormalItem }
@@ -481,8 +499,10 @@ function TKASNormalItem.GetShortcutsHint: String;
 begin
   if Assigned(FToolOwner) then
     Result := FToolOwner.GetToolItemShortcutsHint(Self)
-  else
+  else begin
     Result := '';
+  end;
+  FShortcutsHint := (Length(Result) > 0);
 end;
 
 procedure TKASNormalItem.Load(Config: TXmlConfig; Node: TXmlNode; Loader: TKASToolBarLoader);
@@ -523,6 +543,11 @@ end;
 procedure TKASNormalItem.SaveText(Config: TXmlConfig; Node: TXmlNode);
 begin
   Config.AddValueDef(Node, 'Text', Text, '');
+end;
+
+function TKASNormalItem.ActionHint: Boolean;
+begin
+  Result := not FShortcutsHint;
 end;
 
 { TKASToolBarItems }

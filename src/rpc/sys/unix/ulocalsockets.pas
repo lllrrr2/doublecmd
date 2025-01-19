@@ -28,7 +28,7 @@ const
   SCM_RIGHTS = $01;  //* Transfer file descriptors.  */
 
 type
-  msglen_t = {$IFDEF BSD}cint{$ELSE}size_t{$ENDIF};
+  msglen_t = {$IF DEFINED(BSD) OR DEFINED(HAIKU)}cint{$ELSE}size_t{$ENDIF};
 
   Pmsghdr = ^msghdr;
   msghdr = record
@@ -52,6 +52,19 @@ function sendmsg(__fd: cInt; __message: pmsghdr; __flags: cInt): ssize_t; cdecl;
 function recvmsg(__fd: cInt; __message: pmsghdr; __flags: cInt): ssize_t; cdecl; external clib name 'recvmsg';
 
 {$IF DEFINED(LINUX)}
+
+type
+  ucred = record
+    pid : pid_t;
+    uid : uid_t;
+    gid : gid_t;
+  end;
+
+{$ELSEIF DEFINED(HAIKU)}
+
+const
+  MSG_NOSIGNAL = $0800;
+  SO_PEERCRED  = $4000000;
 
 type
   ucred = record
@@ -122,18 +135,18 @@ function SendMessage(__fd: cInt; __message: pmsghdr; __flags: cInt): ssize_t;
 begin
   repeat
     Result:= sendmsg(__fd, __message, __flags);
-  until (Result <> -1) or (fpgetCerrno <> ESysEINTR);
+  until not ((Result = -1) and ((Cerrno = ESysEINTR) or (Cerrno = ESysEAGAIN)));
 end;
 
 function RecvMessage(__fd: cInt; __message: pmsghdr; __flags: cInt): ssize_t;
 begin
   repeat
     Result:= recvmsg(__fd, __message, __flags);
-  until (Result <> -1) or (fpgetCerrno <> ESysEINTR);
+  until not ((Result = -1) and ((Cerrno = ESysEINTR) or (Cerrno = ESysEAGAIN)));
 end;
 
 procedure SetSocketClientProcessId(fd: cint);
-{$IF DEFINED(LINUX) OR DEFINED(DARWIN)}
+{$IF DEFINED(LINUX) OR DEFINED(DARWIN) OR DEFINED(HAIKU)}
 begin
 
 end;
@@ -178,7 +191,7 @@ end;
 {$ENDIF}
 
 function GetSocketClientProcessId(fd: cint): pid_t;
-{$IF DEFINED(LINUX)}
+{$IF DEFINED(LINUX) OR DEFINED(HAIKU)}
 var
   cred: ucred;
   ALength: TSockLen;
@@ -326,9 +339,12 @@ begin
   DCDebug('VerifyChild');
   ProcessId:= GetSocketClientProcessId(Handle);
   DCDebug(['Credentials from socket: pid=', ProcessId]);
+{$IF DEFINED(DARWIN)}
+  Result:= (GetProcessFileName(ProcessId) = GetProcessFileName(GetProcessId));
+{$ELSE}
   Result:= CheckParent(ProcessId, GetProcessId);{ and
            (GetProcessFileName(ProcessId) = GetProcessFileName(GetProcessId));}
-
+{$ENDIF}
   DCDebug(['VerifyChild: ', Result]);
 end;
 
@@ -339,8 +355,13 @@ begin
   DCDebug('VerifyParent');
   ProcessId:= GetSocketClientProcessId(Handle);
   DCDebug(['Credentials from socket: pid=', ProcessId]);
+{$IF DEFINED(DARWIN)}
+  Result:= (StrToInt(ParamStr(2)) = ProcessId) and
+           (GetProcessFileName(ProcessId) = GetProcessFileName(GetProcessId));
+{$ELSE}
   Result:= CheckParent(FpGetppid, ProcessId) and
            (GetProcessFileName(ProcessId) = GetProcessFileName(GetProcessId));
+{$ENDIF}
   DCDebug(['VerifyParent: ', Result]);
 end;
 
@@ -353,7 +374,7 @@ begin
   if UserID = 0 then begin
     UserID:= GetProcessUserId(StrToInt(ParamStr(2)));
   end;
-  Result:= '/tmp/' + ApplicationName + '-' + IntToStr(UserID);
+  Result:= '/tmp/doublecmd' + '-' + IntToStr(UserID);
   // Verify directory owner
   if not DirectoryExists(Result) then
   begin

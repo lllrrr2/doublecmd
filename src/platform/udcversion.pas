@@ -3,7 +3,7 @@
    -------------------------------------------------------------------------
    Version information about DC, building tools and running environment.
 
-   Copyright (C) 2006-2021  Alexander Koblov (alexx2000@mail.ru)
+   Copyright (C) 2006-2023  Alexander Koblov (alexx2000@mail.ru)
    Copyright (C) 2010       Przemyslaw Nagay (cobines@gmail.com)
 
    This program is free software; you can redistribute it and/or modify
@@ -43,7 +43,8 @@ var
   DCVersion,   // Double Commander version
   TargetWS,    // Target WidgetSet of Lazarus
   OSVersion,   // Operating System where DC is run
-  WSVersion    // WidgetSet library version where DC is run
+  WSVersion,   // WidgetSet library version where DC is run
+  Copyright
   : String;
 
 procedure InitializeVersionInfo;
@@ -64,8 +65,14 @@ uses
   {$IFDEF LCLQT5}
   , qt5
   {$ENDIF}
+  {$IFDEF LCLQT6}
+  , qt6
+  {$ENDIF}
   {$IFDEF LCLGTK2}
   , gtk2
+  {$ENDIF}
+  {$IFDEF LCLGTK3}
+  , LazGtk3
   {$ENDIF}
   {$IFDEF MSWINDOWS}
   , Windows, JwaNative, JwaNtStatus, JwaWinType, uMyWindows
@@ -91,7 +98,7 @@ begin
       sl.LoadFromFile(FileName);
       Result := True;
     except
-      on EFilerError do; // Bypass
+      on EStreamError do sl.Free;
     end;
   end;
 end;
@@ -130,14 +137,39 @@ begin
       if Result <> EmptyStr then
         Result := TrimQuotes(Result)
       else
-        Result := sl.Values['DISTRIB_ID'] +
-                  sl.Values['DISTRIB_RELEASE'] +
+        Result := sl.Values['DISTRIB_ID'] + ' ' +
+                  sl.Values['DISTRIB_RELEASE'] + ' ' +
                   sl.Values['DISTRIB_CODENAME'];
     end;
   finally
     sl.Free;
   end;
 end;
+
+function GetOsFromOsRelease: String;
+var
+  sl: TStringListEx;
+begin
+  Result := EmptyStr;
+
+  if GetStringsFromFile('/etc/os-release', sl) then
+  try
+    if sl.Count > 0 then
+    begin
+      Result := sl.Values['PRETTY_NAME'];
+
+      if Result <> EmptyStr then
+        Result := TrimQuotes(Result)
+      else
+        Result := sl.Values['NAME'] + ' ' +
+                  sl.Values['VERSION'] + ' ' +
+                  sl.Values['ID'];
+    end;
+  finally
+    sl.Free;
+  end;
+end;
+
 
 function GetOsFromProcVersion: String;
 var
@@ -290,13 +322,17 @@ begin
   with TVersionInfo.Create do
   begin
     Load(HINSTANCE);
+    Copyright:= StringFileInfo.Items[0].Values['LegalCopyright'];
     DCVersion:= Format('%d.%d.%.d', [FixedInfo.FileVersion[0],
                                      FixedInfo.FileVersion[1],
                                      FixedInfo.FileVersion[2]]);
     if (FixedInfo.FileFlags and VS_FF_PRERELEASE <> 0) then
-      DCVersion+= ' alpha'
-    else begin
-      DCVersion+= ' beta';
+    begin
+      if (FixedInfo.FileFlags and VS_FF_PRIVATEBUILD <> 0) then
+        DCVersion+= ' alpha'
+      else begin
+        DCVersion+= ' beta';
+      end;
     end;
     Free;
   end;
@@ -447,11 +483,15 @@ begin
     OSVersion := GetMacOSXVersion;
   {$ENDIF}
 
+  // Try using linux systemd base.
+  if OSVersion = EmptyStr then
+    OSVersion := GetOsFromOsRelease;
+
   // Other methods.
   if OSVersion = EmptyStr then
-    OSVersion := GetOsFromIssue;
-  if OSVersion = EmptyStr then
     OSVersion := GetOsFromProcVersion;
+  if OSVersion = EmptyStr then
+    OSVersion := GetOsFromIssue;
 
   // Set default names.
   if OSVersion = EmptyStr then
@@ -464,6 +504,8 @@ begin
     OSVersion := 'FreeBSD';
     {$ELSEIF DEFINED(BSD)}
     OSVersion := 'BSD';
+    {$ELSEIF DEFINED(HAIKU)}
+    OSVersion := 'Haiku';
     {$ELSE}
     OSVersion := 'Unix';
     {$ENDIF}
@@ -471,18 +513,16 @@ begin
   end;
   {$ENDIF}
 
-  {$IF DEFINED(LCLQT) or DEFINED(LCLQT5)}
-  WSVersion := 'Qt ' + QtVersion + ', libQt' + QtVersion[0] + 'Pas ';
-
-  WSVersion := WSVersion + IntToStr((QT_VERSION shr 16) and 255) + '.' +
-                           IntToStr((QT_VERSION shr  8) and 255) + '.' +
-                           IntToStr((QT_VERSION       ) and 255);
-  {$ENDIF}
-
-  {$IFDEF LCLGTK2}
+  {$IF DEFINED(LCLQT) or DEFINED(LCLQT5) or DEFINED(LCLQT6)}
+  WSVersion := 'Qt ' + QtVersion;
+  {$ELSEIF DEFINED(LCLGTK2)}
   WSVersion := 'GTK ' + IntToStr(gtk_major_version) + '.' +
                         IntToStr(gtk_minor_version) + '.' +
                         IntToStr(gtk_micro_version);
+  {$ELSEIF DEFINED(LCLGTK3)}
+  WSVersion := 'GTK ' + IntToStr(gtk_get_major_version) + '.' +
+                        IntToStr(gtk_get_minor_version) + '.' +
+                        IntToStr(gtk_get_micro_version);
   {$ENDIF}
 end;
 

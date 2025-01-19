@@ -163,8 +163,10 @@ type
   { Analyzes keyboard modifier keys (Shift, Ctrl, etc.) and mouse button nr
     and returns the appropriate drop effect. }
   function GetDropEffectByKeyAndMouse(ShiftState: TShiftState;
-                                      MouseButton: TMouseButton): TDropEffect;
-  function GetDropEffectByKey(ShiftState: TShiftState): TDropEffect;
+                                      MouseButton: TMouseButton;
+                                      DefaultEffect: Boolean): TDropEffect;
+  function GetDropEffectByKey(ShiftState: TShiftState;
+                              DefaultEffect: Boolean): TDropEffect;
 
 var
   { If set to True, then dragging is being transformed: internal to external or vice-versa. }
@@ -187,11 +189,13 @@ uses
 {$ELSEIF DEFINED(LCLQT) and DEFINED(DARWIN)}
 uses
   uDragDropQt, uDragDropCocoa;
-{$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5)}
+{$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5) OR DEFINED(LCLQT6)}
 uses
   uDragDropQt;
 {$ENDIF}
 
+const
+  DropDefaultEffect: array[Boolean] of TDropEffect = (DropMoveEffect, DropCopyEffect);
 
 { ---------- TDragDropSource ---------- }
 
@@ -349,7 +353,7 @@ begin
   Result := True;
 {$ELSEIF DEFINED(LCLGTK) OR DEFINED(LCLGTK2)}
   Result := True;
-{$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5)}
+{$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5) OR DEFINED(LCLQT6)}
   Result := True;
 {$ELSE}
   Result := False;
@@ -366,7 +370,7 @@ begin
   Result := TDragDropSourceGTK.Create(Control);
 {$ELSEIF DEFINED(LCLQT) and DEFINED(DARWIN)}
   Result := TDragDropSourceCocoa.Create(Control);
-{$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5)}
+{$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5) OR DEFINED(LCLQT6)}
   Result := TDragDropSourceQT.Create(Control);
 {$ELSE}
   Result := TDragDropSource.Create(Control);   // Dummy
@@ -379,44 +383,46 @@ begin
   Result := TDragDropTargetWindows.Create(Control);
 {$ELSEIF DEFINED(LCLGTK) or DEFINED(LCLGTK2)}
   Result := TDragDropTargetGTK.Create(Control);
-{$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5)}
+{$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5) OR DEFINED(LCLQT6)}
   Result := TDragDropTargetQT.Create(Control);
 {$ELSE}
   Result := TDragDropTarget.Create(Control);   // Dummy
 {$ENDIF}
 end;
 
-function GetDropEffectByKey(ShiftState: TShiftState): TDropEffect;
+function GetDropEffectByKey(ShiftState: TShiftState;
+                            DefaultEffect: Boolean): TDropEffect;
 const
   ssBoth = [ssLeft, ssRight];
 begin
   if (ssBoth * ShiftState = ssBoth) then
-    Exit(DropMoveEffect);
-  ShiftState := [ssCtrl, ssShift, ssAlt] * ShiftState;
+    Exit(DropDefaultEffect[not DefaultEffect]);
+  ShiftState := [ssModifier, ssShift, ssAlt] * ShiftState;
   if ShiftState = [] then
-    Result := DropCopyEffect   // default to Copy when no keys pressed
+    Result := DropDefaultEffect[DefaultEffect]   // default to Copy when no keys pressed
   else if ShiftState = [ssShift] then
-    Result := DropMoveEffect
-  else if ShiftState = [ssCtrl] then
-    Result := DropMoveEffect
+    Result := DropDefaultEffect[not DefaultEffect]
+  else if ShiftState = [ssModifier] then
+    Result := DropDefaultEffect[not DefaultEffect]
   else if ShiftState = [ssAlt] then
     Result := DropAskEffect
-  else if ShiftState = [ssCtrl, ssShift] then
+  else if ShiftState = [ssModifier, ssShift] then
     Result := DropLinkEffect
   else
     Result := DropNoEffect;    // some other key combination pressed
 end;
 
 function GetDropEffectByKeyAndMouse(ShiftState: TShiftState;
-                                    MouseButton: TMouseButton): TDropEffect;
+                                    MouseButton: TMouseButton;
+                                    DefaultEffect: Boolean): TDropEffect;
 begin
   case MouseButton of
     mbLeft:
       begin
         if ShiftState = [ssRight] then
-          Result := DropMoveEffect
+          Result := DropDefaultEffect[not DefaultEffect]
         else
-          Result := GetDropEffectByKey(ShiftState);
+          Result := GetDropEffectByKey(ShiftState, DefaultEffect);
       end;
 
     mbMiddle:

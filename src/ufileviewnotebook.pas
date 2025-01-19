@@ -3,7 +3,7 @@
    -------------------------------------------------------------------------
    This unit contains TFileViewPage and TFileViewNotebook objects.
 
-   Copyright (C) 2016-2022 Alexander Koblov (alexx2000@mail.ru)
+   Copyright (C) 2016-2024 Alexander Koblov (alexx2000@mail.ru)
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -17,6 +17,14 @@
 
    You should have received a copy of the GNU General Public License
    along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+   Notes:
+   1. TFileViewNotebook.DestroyAllPages is the workaround for the bug of Lazarus.
+      TFileViewNotebook.DestroyAllPages and the related codes can be removed,
+      after Double Commander built with Lazarus 2.4 on Linux.
+      see also:
+      https://gitlab.com/freepascal.org/lazarus/lazarus/-/issues/40019
+      https://github.com/doublecmd/doublecmd/pull/703
 }
 
 unit uFileViewNotebook; 
@@ -107,12 +115,12 @@ type
 
   TFileViewNotebook = class(TPageControl)
   private
-    FCanChangePageIndex: Boolean;
     FNotebookSide: TFilePanelSelect;
     FStartDrag: Boolean;
     FDraggedPageIndex: Integer;
     FTabDblClicked: Boolean;
     FHintPageIndex: Integer;
+    FHintPos: TPoint;
     FLastMouseDownTime: TDateTime;
     FLastMouseDownPageIndex: Integer;
 
@@ -121,6 +129,8 @@ type
     function GetFileViewOnPage(Index: Integer): TFileView;
     function GetPage(Index: Integer): TFileViewPage; reintroduce;
 
+    procedure TabShowHint(Sender: TObject; HintInfo: PHintInfo);
+
   protected
     procedure DoChange; override;
     function GetPageClass: TCustomPageClass; override;
@@ -128,6 +138,14 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure WMEraseBkgnd(var Message: TLMEraseBkgnd); message LM_ERASEBKGND;
+
+{$IF (DEFINED(LCLQT) or DEFINED(LCLQT5) or DEFINED(LCLQT6))}
+    procedure CNNotify(var Message: TLMNotify); message CN_NOTIFY;
+{$ENDIF}
+
+{$IF DEFINED(LCLWIN32)}
+    procedure PaintWindow(DC: HDC); override;
+{$ENDIF}
 
   public
     constructor Create(ParentControl: TWinControl;
@@ -141,7 +159,6 @@ type
     procedure WndProc(var Message: TLMessage); override;
 {$ENDIF}
     function AddPage: TFileViewPage;
-    function CanChangePageIndex: Boolean; override;
     function InsertPage(Index: Integer): TFileViewPage; reintroduce;
     function NewEmptyPage: TFileViewPage;
     function NewPage(CloneFromPage: TFileViewPage): TFileViewPage;
@@ -184,7 +201,8 @@ uses
   {$IF DEFINED(LCLGTK2)}
   , Glib2, Gtk2
   {$ELSEIF DEFINED(LCLWIN32)}
-  , Win32Proc
+  , Win32Proc, Win32Themes, UxTheme, Graphics
+  , Themes {$IF DEFINED(DARKWIN)}, uDarkStyle {$ENDIF}
   {$ENDIF}
   {$IF DEFINED(MSWINDOWS)}
   , Windows, Messages
@@ -409,9 +427,10 @@ begin
   ShowHint := True;
 
   FHintPageIndex := -1;
-  FCanChangePageIndex := True;
   FNotebookSide := NotebookSide;
   FStartDrag := False;
+
+  OnShowHint := @TabShowHint;
 
   {$IFDEF MSWINDOWS}
   // The pages contents are removed from drawing background in EraseBackground.
@@ -458,11 +477,6 @@ end;
 function TFileViewNotebook.AddPage: TFileViewPage;
 begin
   Result := InsertPage(PageCount);
-end;
-
-function TFileViewNotebook.CanChangePageIndex: Boolean;
-begin
-  Result:= (inherited CanChangePageIndex) and FCanChangePageIndex;
 end;
 
 function TFileViewNotebook.InsertPage(Index: Integer): TFileViewPage;
@@ -543,11 +557,45 @@ begin
   Message.Result := 1;
 end;
 
-procedure TFileViewNotebook.DestroyAllPages;
+{$IF (DEFINED(LCLQT) or DEFINED(LCLQT5) or DEFINED(LCLQT6))}
+procedure TFileViewNotebook.CNNotify(var Message: TLMNotify);
 begin
-  FCanChangePageIndex:= False;
-  Tabs.Clear;
-  FCanChangePageIndex:= True;
+  // Workaround: https://github.com/doublecmd/doublecmd/issues/1570
+  if Message.NMHdr^.code = TCN_SELCHANGE then
+  begin
+    if PtrInt(Message.NMHDR^.idfrom) >= PageCount then
+      Message.NMHDR^.idfrom:= PtrUInt(PageCount - 1);
+  end;
+  inherited CNNotify(Message);
+end;
+{$ENDIF}
+
+{$IF DEFINED(LCLWIN32)}
+procedure TFileViewNotebook.PaintWindow(DC: HDC);
+var
+  ARect: TRect;
+begin
+  inherited PaintWindow(DC);
+{$IF DEFINED(DARKWIN)}
+  if g_darkModeEnabled then Exit;
+{$ENDIF}
+  if (Win32MajorVersion >= 10) and (PageIndex > -1) then
+  begin
+    ARect:= TabRect(PageIndex);
+    IntersectClipRect(DC, ARect.Left, ARect.Top, ARect.Right, ARect.Top + ScaleY(3, 96));
+    InflateRect(ARect, ScaleX(8, 96), 0);
+    DrawThemeBackground(TWin32ThemeServices(ThemeServices).Theme[teToolBar], DC, TP_BUTTON, TS_CHECKED, ARect, nil);
+  end;
+end;
+{$ENDIF}
+
+procedure TFileViewNotebook.DestroyAllPages;
+var
+  i: Integer;
+begin
+  for i:=PageCount-1 downto 0 do
+    if i<>ActivePageIndex then Tabs.Delete( i );
+  Tabs.Delete( 0 );
 end;
 
 procedure TFileViewNotebook.ActivatePrevTab;
@@ -580,6 +628,37 @@ function TFileViewNotebook.IndexOfPageAt(P: TPoint): Integer;
 begin
   Result:= inherited IndexOfPageAt(P);
   if (Result >= PageCount) then Result:= -1;
+end;
+
+// compared to handling hints in MouseMove(), DoShowHint() is compatible
+// with all WidgetSets.
+// on Windows, when Mouse Move in the blank of the TabControl,
+// MouseMove() will not be called, then the wrong hint is shown.
+procedure TFileViewNotebook.TabShowHint(Sender: TObject; HintInfo: PHintInfo);
+var
+  ATabIndex: Integer;
+begin
+  ATabIndex := IndexOfPageAt( ScreenToClient(Mouse.CursorPos) );
+
+  if ATabIndex >= 0 then begin
+    if (ATabIndex <> PageIndex) and (Length(Page[ATabIndex].LockPath) <> 0) then
+      HintInfo^.HintStr := '* ' + Page[ATabIndex].LockPath
+    else
+      HintInfo^.HintStr := View[ATabIndex].CurrentPath;
+  end else begin
+    HintInfo^.HintStr := '';
+    FHintPos := TPoint.Zero;
+  end;
+
+  if ATabIndex <> FHintPageIndex then begin
+    FHintPageIndex := ATabIndex;
+    FHintPos := HintInfo^.HintPos;
+  end else begin
+    if not FHintPos.IsZero then
+      HintInfo^.HintPos := FHintPos;
+  end;
+
+  HintInfo^.ReshowTimeout := 500;
 end;
 
 procedure TFileViewNotebook.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -632,25 +711,8 @@ begin
 end;
 
 procedure TFileViewNotebook.MouseMove(Shift: TShiftState; X, Y: Integer);
-var
-  ATabIndex: Integer;
 begin
   inherited;
-
-  if ShowHint then
-  begin
-    ATabIndex := IndexOfPageAt(Classes.Point(X, Y));
-    if (ATabIndex >= 0) and (ATabIndex <> FHintPageIndex) then
-    begin
-      FHintPageIndex := ATabIndex;
-      Application.CancelHint;
-      if (ATabIndex <> PageIndex) and (Length(Page[ATabIndex].LockPath) <> 0) then
-        Hint := Page[ATabIndex].LockPath
-      else
-        Hint := View[ATabIndex].CurrentPath;
-    end;
-  end;
-
   if FStartDrag then
   begin
     FStartDrag := False;
@@ -740,12 +802,7 @@ begin
     begin
       // Move within the same panel.
       if ATabIndex <> -1 then
-      begin
         Tabs.Move(FDraggedPageIndex, ATabIndex);
-        {$IFDEF LCLCOCOA}
-        GetPage(ATabIndex).MakeActive;
-        {$ENDIF}
-      end;
     end
     else if (SourceNotebook.FDraggedPageIndex < SourceNotebook.PageCount) then
     begin
@@ -776,6 +833,11 @@ procedure TFileViewNotebook.DoChange;
 begin
   inherited DoChange;
   ActivePage.DoActivate;
+{$IF DEFINED(LCLWIN32)}
+  if (Win32MajorVersion >= 10)
+  {$IF DEFINED(DARKWIN)} and (not g_darkModeEnabled){$ENDIF} then
+    Invalidate;
+{$ENDIF}
 end;
 
 function TFileViewNotebook.GetPageClass: TCustomPageClass;

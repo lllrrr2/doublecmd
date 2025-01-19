@@ -4,7 +4,7 @@
    Base class for file views which have a main control with a list of files.
 
    Copyright (C) 2012  Przemyslaw Nagay (cobines@gmail.com)
-   Copyright (C) 2015-2018  Alexander Koblov (alexx2000@mail.ru)
+   Copyright (C) 2015-2023  Alexander Koblov (alexx2000@mail.ru)
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -29,8 +29,8 @@ interface
 
 uses
   Classes, SysUtils, Controls, ExtCtrls, StdCtrls, LCLType, LMessages, EditBtn,
-  Graphics,
-  uFile,
+  Graphics, LCLVersion,
+  uFile, uDisplayFile,
   uFileViewWorker,
   uOrderedFileView,
   uFileView,
@@ -39,6 +39,9 @@ uses
   uDebug;
 
 type
+
+  TFileViewOnDrawCell = procedure(Sender: TFileView; aCol, aRow: Integer;
+    aRect: TRect; focused: Boolean; aFile: TDisplayFile) of object;
 
   TRenameFileActionType=(rfatName,rfatExt,rfatFull,rfatToSeparators,rfatNextSeparated);
 
@@ -57,12 +60,22 @@ type
 
   TEditButtonEx = class(TEditButton)
   private
+    procedure handleSpecialKeys( var Key: Word );
     function GetFont: TFont;
     procedure SetFont(AValue: TFont);
   protected
+    // Workaround: https://gitlab.com/freepascal.org/lazarus/lazarus/-/issues/36006
+{$IF (DEFINED(LCLQT) or DEFINED(LCLQT5) or DEFINED(LCLQT6)) and (LCL_FULLVERSION < 3020000)}
+    procedure Hack(Data: PtrInt);
+    procedure EditExit; override;
+{$ENDIF}
     function CalcButtonVisible: Boolean; override;
     function GetDefaultGlyphName: String; override;
+    procedure EditKeyDown(var Key: word; Shift: TShiftState); override;
   public
+    onKeySWITCH: TKeyEvent;
+    onKeyESCAPE: TNotifyEvent;
+    onKeyRETURN: TNotifyEvent;
     property Font: TFont read GetFont write SetFont;
   end;
 
@@ -94,20 +107,15 @@ type
     procedure edtRenameEnter(Sender: TObject);
     procedure edtRenameExit(Sender: TObject);
     procedure edtRenameButtonClick(Sender: TObject);
-    procedure handleKey(Sender: TObject; var Key: Word; Shift: TShiftState);
-    {$IFDEF LCLCOCOA}
-    procedure edtRenameKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
-    procedure edtRenameKeyUp(Sender: TObject; var Key: Word; Shift: TShiftState);
-    procedure edtRenameOnChange(Sender: TObject);
-    {$ENDIF}
     procedure edtRenameMouseDown(Sender: TObject; Button: TMouseButton;Shift: TShiftState; X, Y: Integer);
 
+{$IFDEF LCLWIN32}
+    procedure edtRenameKeyDown(Sender: TObject; var Key: word; Shift: TShiftState);
+{$ENDIF}
+    procedure edtRenameOnKeyESCAPE(Sender: TObject);
+    procedure edtRenameOnKeyRETURN(Sender: TObject);
+    procedure edtRenameOnKeySwitch(Sender: TObject; var Key: Word; Shift: TShiftState);
   protected
-    {$IFDEF LCLCOCOA}
-      originalText: String;
-      keyDownText: String;
-    {$ENDIF}
-
     edtRename: TEditButtonEx;
     FRenameFile: TFile;
     FRenFile:TRenameFileEditInfo;
@@ -124,6 +132,7 @@ type
        or after dropping something after dragging with right mouse button.
     }
     FMainControlMouseDown: Boolean;
+    FMainControlMouseDownPoint: TPoint;
     FMouseSelectionStartIndex: Integer;
     FMouseSelectionLastState: Boolean;
     FDragStartPoint: TPoint;
@@ -170,6 +179,7 @@ type
     function IsMouseSelecting: Boolean; inline;
     procedure MainControlDblClick(Sender: TObject);
     procedure DoMainControlFileWork;
+    procedure MouseStateReset;
     procedure MainControlQuadClick(Sender: TObject);
     procedure MainControlDragDrop(Sender, Source: TObject; X, Y: Integer);
     procedure MainControlDragOver(Sender, Source: TObject; X, Y: Integer; State: TDragState; var Accept: Boolean);
@@ -214,6 +224,8 @@ type
     procedure SetFocus; override;
     procedure SetDragCursor(Shift: TShiftState); override;
 
+    procedure UpdateColor; override;
+
   published
     procedure cm_RenameOnly(const Params: array of string);
     procedure cm_ContextMenu(const Params: array of string);
@@ -228,14 +240,45 @@ uses
 {$ENDIF}
   LCLIntf, LCLProc, LazUTF8, Forms, Dialogs, Buttons, DCOSUtils, DCStrUtils,
   fMain, uShowMsg, uLng, uFileProperty, uFileSource, uFileSourceOperationTypes,
-  uGlobs, uInfoToolTip, uDisplayFile, uFileSystemFileSource, uFileSourceUtil,
-  uArchiveFileSourceUtil, uFormCommands, uKeyboard, uFileSourceSetFilePropertyOperation;
+  uGlobs, uInfoToolTip, uFileSystemFileSource, uFileSourceUtil,
+  uArchiveFileSourceUtil, uFormCommands, uKeyboard, uFileSourceSetFilePropertyOperation,
+  uFileSystemWatcher;
 
 type
   TControlHandlersHack = class(TWinControl)
   end;
 
 { TEditButtonEx }
+
+procedure TEditButtonEx.EditKeyDown(var Key: Word; Shift: TShiftState);
+begin
+  inherited EditKeyDown(Key, Shift);
+
+  case Key of
+    VK_UP,
+    VK_DOWN,
+    VK_ESCAPE,
+    VK_RETURN,
+    VK_SELECT:
+      handleSpecialKeys( Key );
+  end;
+
+{$IFDEF LCLGTK2}
+  // Workaround for GTK2 - up and down arrows moving through controls.
+  if Key in [VK_UP, VK_DOWN] then Key := 0;
+{$ENDIF}
+end;
+
+procedure TEditButtonEx.handleSpecialKeys(var Key: Word);
+begin
+  if Key = VK_ESCAPE then begin
+    if Assigned(onKeyESCAPE) then onKeyESCAPE( self );
+  end else if Key in [VK_RETURN, VK_SELECT] then begin
+    if Assigned(onKeyRETURN) then onKeyRETURN( self );
+  end else begin
+    if Assigned(onKeySWITCH) then onKeySWITCH( Self, Key, [] );
+  end;
+end;
 
 function TEditButtonEx.GetFont: TFont;
 begin
@@ -246,6 +289,23 @@ procedure TEditButtonEx.SetFont(AValue: TFont);
 begin
   BaseEditor.Font:= AValue;
 end;
+
+{$IF (DEFINED(LCLQT) or DEFINED(LCLQT5) or DEFINED(LCLQT6)) and (LCL_FULLVERSION < 3020000)}
+procedure TEditButtonEx.Hack(Data: PtrInt);
+begin
+  if (csClicked in Button.ControlState) then
+  begin
+    BuddyClick;
+    Button.ControlState:= Button.ControlState - [csClicked];
+  end;
+  inherited EditExit;
+end;
+
+procedure TEditButtonEx.EditExit;
+begin
+  Application.QueueAsyncCall(@Hack, 0);
+end;
+{$ENDIF}
 
 function TEditButtonEx.GetDefaultGlyphName: String;
 begin
@@ -258,6 +318,137 @@ begin
 end;
 
 { TFileViewWithMainCtrl }
+
+
+{$IFDEF LCLWIN32}
+procedure TFileViewWithMainCtrl.edtRenameKeyDown(Sender: TObject; var Key: word; Shift: TShiftState);
+begin
+  case Key of
+    // Workaround for Win32 - right arrow must clear selection at first move.
+    VK_RIGHT:
+      begin
+        if (Win32MajorVersion < 10) and (Shift = []) and (edtRename.SelLength > 0) then
+        begin
+          Key := edtRename.CaretPos.X;
+          edtRename.SelLength := 0;
+          edtRename.CaretPos := Classes.Point(Key, 0);
+          Key := 0;
+        end;
+        FRenFile.UserManualEdit:=True; // user begin manual edit - no need cycle Name,Ext,FullName selection
+      end;
+     VK_LEFT:
+        FRenFile.UserManualEdit:=True; // user begin manual edit - no need cycle Name,Ext,FullName selection
+  end;
+end;
+{$ENDIF}
+
+procedure TFileViewWithMainCtrl.edtRenameOnKeyESCAPE(Sender: TObject);
+begin
+  edtRename.Visible:=False;
+  SetFocus;
+end;
+
+procedure TFileViewWithMainCtrl.edtRenameOnKeyRETURN(Sender: TObject);
+var
+  NewFileName: String;
+  OldFileName: String;
+begin
+  NewFileName := edtRename.Text;
+  OldFileName := ExtractFileName(edtRename.Hint);
+
+  try
+    case uFileSourceUtil.RenameFile(FileSource, FRenameFile, NewFileName, True, True) of
+      sfprSuccess:
+        begin
+          // FRenameFile is nil when a file list
+          // already updated by the real 'rename' event
+          if FlatView and Assigned(FRenameFile) and (TFileSystemWatcher.Features * [fsfFlatView] = []) then
+          begin
+            PushRenameEvent(FRenameFile, NewFileName);
+          end;
+          edtRename.Visible:= False;
+          SetActiveFile(CurrentPath + NewFileName);
+          SetFocus;
+        end;
+      sfprError:
+        msgError(Format(rsMsgErrRename, [OldFileName, NewFileName]));
+    end;
+  except
+    on e: EInvalidFileProperty do
+      msgError(Format(rsMsgErrRename + ':' + LineEnding + '%s (%s)', [OldFileName, NewFileName, rsMsgInvalidFileName, e.Message]));
+  end;
+end;
+
+procedure TFileViewWithMainCtrl.edtRenameOnKeySwitch(Sender: TObject;
+  var Key: Word; Shift: TShiftState);
+var
+  AFile: TFile;
+  Index: PtrInt;
+  OldIndex: PtrInt;
+  NewFileName: String;
+  OldFileName: String;
+  Result: TSetFilePropertyResult;
+begin
+  if (Key = VK_UP) then
+    Index:= GetActiveFileIndex - 1
+  else begin
+    Index:= GetActiveFileIndex + 1
+  end;
+  if not IsFileIndexInRange(Index) then
+  begin
+    Key:= 0;
+    Exit;
+  end;
+  AFile:= FFiles[Index].FSFile.Clone;
+  try
+    if not AFile.IsNameValid then
+    begin
+      Key:= 0;
+      Exit;
+    end;
+    edtRename.Tag:= 1;
+    EnableWatcher(False);
+    NewFileName := edtRename.Text;
+    OldFileName := ExtractFileName(edtRename.Hint);
+    try
+      if (OldFileName = NewFileName) then
+        Result:= sfprSkipped
+      else begin
+        Result:= uFileSourceUtil.RenameFile(FileSource, FRenameFile, NewFileName, True, False);
+      end;
+      case Result of
+        sfprSkipped,
+        sfprSuccess:
+          begin
+            if (Result = sfprSuccess) then
+            begin
+              OldIndex:= GetActiveFileIndex;
+              FFiles[OldIndex].FSFile.Name:= NewFileName;
+              DoFileUpdated(FFiles[OldIndex], [fpName]);
+            end;
+            SetActiveFile(Index);
+            edtRename.Tag:= 2;
+            ShowRenameFileEdit(AFile);
+            edtRename.Tag:= 1;
+            UpdateRenameFileEditPosition;
+          end;
+        sfprError:
+          begin
+            Key:= 0;
+            msgError(Format(rsMsgErrRename, [OldFileName, NewFileName]));
+          end;
+      end;
+    except
+      on e: EInvalidFileProperty do
+      begin
+        Key:= 0;
+        msgError(Format(rsMsgErrRename + ':' + LineEnding + '%s (%s)', [OldFileName, NewFileName, rsMsgInvalidFileName, e.Message]));
+      end;
+    end;
+  finally
+    FreeAndNil(AFile);
+  end;
+end;
 
 procedure TFileViewWithMainCtrl.ClearAfterDragDrop;
 begin
@@ -316,13 +507,12 @@ begin
   edtRename.Visible := False;
   edtRename.TabStop := False;
   edtRename.AutoSize := False;
-  {$IFDEF LCLCOCOA}
-  edtRename.OnKeyDown := @edtRenameKeyDown;
-  edtRename.OnKeyUp := @edtRenameKeyUp;
-  edtRename.OnChange := @edtRenameOnChange;
-  {$ELSE}
-  edtRename.OnKeyDown := @handleKey;
-  {$ENDIF}
+{$IFDEF LCLWIN32}
+  edtRename.onKeyDown:=@edtRenameKeyDown;
+{$ENDIF}
+  edtRename.onKeyESCAPE:=@edtRenameOnKeyESCAPE;
+  edtRename.onKeyRETURN:=@edtRenameOnKeyRETURN;
+  edtRename.onKeySWITCH:=@edtRenameOnKeySwitch;
   edtRename.OnMouseDown:=@edtRenameMouseDown;
   edtRename.OnEnter := @edtRenameEnter;
   edtRename.OnExit := @edtRenameExit;
@@ -362,7 +552,7 @@ end;
 procedure TFileViewWithMainCtrl.DoActiveChanged;
 begin
   inherited DoActiveChanged;
-  MainControl.Color := DimColor(gBackColor);
+  UpdateColor;
   // Needed for rename on mouse
   FMouseRename := False;
 end;
@@ -445,14 +635,20 @@ end;
 
 procedure TFileViewWithMainCtrl.DoLoadingFileListLongTime;
 begin
-  MainControl.Color := DimColor(gBackColor);
+  UpdateColor;
   inherited DoLoadingFileListLongTime;
 end;
 
 procedure TFileViewWithMainCtrl.DoUpdateView;
 begin
   inherited DoUpdateView;
-  MainControl.Color := DimColor(gBackColor);
+  UpdateColor;
+end;
+
+procedure TFileViewWithMainCtrl.UpdateColor;
+begin
+  inherited UpdateColor;
+  MainControl.Color := DimColor(gColors.FilePanel^.BackColor);
 end;
 
 procedure TFileViewWithMainCtrl.FinalizeDragDropEx(AControl: TWinControl);
@@ -492,12 +688,17 @@ var
   OldTabIndex: Integer;
   NewTabIndex: Integer;
 begin
+  if not Assigned(NotebookPage) then
+  begin
+    DoMainControlFileWork();
+    exit;
+  end;
+
   OldTabIndex := TFileViewPage(NotebookPage).Notebook.ActivePageIndex;
 
   DoMainControlFileWork();
 
   NewTabIndex := TFileViewPage(NotebookPage).Notebook.ActivePageIndex;
-  DCDebug( 'TabIndexChanged:'+InttoStr(OldTabIndex)+'-->'+InttoStr(NewTabIndex) );
   if NewTabIndex<> OldTabIndex then TControl(Sender).Perform(LM_LBUTTONUP,0,0);
 end;
 {$ELSE}
@@ -522,7 +723,7 @@ begin
 {$ENDIF}
 
   FStartDrag := False; // don't start drag on double click
-  Point := MainControl.ScreenToClient(Mouse.CursorPos);
+  Point := FMainControlMouseDownPoint;
 
   // If on a file/directory then choose it.
   FileIndex := GetFileIndexFromCursor(Point.x, Point.y, AtFileList);
@@ -546,6 +747,17 @@ begin
 {$ENDIF}
 end;
 
+procedure TFileViewWithMainCtrl.MouseStateReset;
+begin
+  FStartDrag := False;
+  FRangeSelecting := False;
+
+  if IsMouseSelecting and (GetCaptureControl = MainControl) then
+    SetCaptureControl(nil);
+
+  FMainControlMouseDown := False;
+end;
+
 procedure TFileViewWithMainCtrl.MainControlDragDrop(Sender, Source: TObject; X, Y: Integer);
 var
   SourcePanel: TFileViewWithMainCtrl;
@@ -565,7 +777,8 @@ begin
     DropParams := TDropParams.Create(
       SourceFiles, // Will be freed automatically.
       GetDropEffectByKeyAndMouse(GetKeyShiftStateEx,
-                                 SourcePanel.FMainControlLastMouseButton),
+                                 SourcePanel.FMainControlLastMouseButton,
+                                 gDefaultDropEffect),
       MainControl.ClientToScreen(Classes.Point(X, Y)),
       True,
       SourcePanel, Self,
@@ -706,6 +919,10 @@ begin
         Key := 0;
       end;
 
+    {$IFDEF DARWIN}
+    VK_LWIN,
+    VK_RWIN,
+    {$ENDIF}
     VK_MENU:  // Alt key
       if MainControl.Dragging then
       begin
@@ -736,6 +953,9 @@ var
   AFile, APreviousFile: TDisplayFile;
 begin
   SetDragCursor(Shift);
+  FMainControlMouseDownPoint:= Classes.Point(X, Y);
+  if gRenameConfirmMouse and edtRename.Visible then
+    edtRenameOnKeyRETURN(edtRename);
   if (DragManager <> nil) and DragManager.IsDragging and (Button = mbRight) then
     Exit;
   FileIndex := GetFileIndexFromCursor(X, Y, AtFileList);
@@ -751,17 +971,15 @@ begin
 {$ENDIF}
 
   // history navigation for mice with extra buttons
-  case Button of
-    mbExtra1:
-      begin
-        GoToPrevHistory;
-        Exit;
-      end;
-    mbExtra2:
-      begin
-        GoToNextHistory;
-        Exit;
-      end;
+  if Button in [mbExtra1, mbExtra2] then
+  begin
+    MouseStateReset;
+
+    case Button of
+      mbExtra1: GoToPrevHistory;
+      mbExtra2: GoToNextHistory;
+    end;
+    Exit;
   end;
 
   if IsLoadingFileList then Exit;
@@ -939,6 +1157,8 @@ begin
         if IsItemValid(AFile) then
         begin
           MainControl.BeginDrag(False);
+          // Restore selection of active file
+          if (FSelectedCount > 0) and (not AFile.Selected) then MarkFile(AFile, True);
         end;
       end;
     end;
@@ -1260,7 +1480,7 @@ var
 begin
   if (DragManager <> nil) and DragManager.IsDragging then
     begin
-      DropEffect := GetDropEffectByKey(Shift);
+      DropEffect := GetDropEffectByKey(Shift, gDefaultDropEffect);
 
       if DropEffect = DropMoveEffect then
         TControlHandlersHack(MainControl).DragCursor:= crArrowMove
@@ -1444,9 +1664,6 @@ end;
 
 procedure TFileViewWithMainCtrl.edtRenameEnter(Sender: TObject);
 begin
-  {$IFDEF LCLCOCOA}
-  originalText:= edtRename.Text;
-  {$ENDIF}
   FWindowProc:= MainControl.WindowProc;
   MainControl.WindowProc:= @MainControlWindowProc;
 end;
@@ -1457,121 +1674,22 @@ begin
   edtRename.Visible := False;
   MainControl.WindowProc:= FWindowProc;
 
+  if edtRename.Tag > 0 then
+  begin
+    edtRename.Tag:= 0;
+    EnableWatcher(IsFileSystemWatcher);
+    Reload(True);
+  end;
+
   // OnEnter don't called automatically (bug?)
   // TODO: Check on which widgetset/OS this is needed.
   FMainControl.OnEnter(Self);
 end;
 
 procedure TFileViewWithMainCtrl.edtRenameButtonClick(Sender: TObject);
-var
-  Key: Word = VK_RETURN;
 begin
-  handleKey(Sender, Key, []);
+  edtRenameOnKeyRETURN(Sender);
 end;
-
-{$IFDEF LCLCOCOA}
-procedure TFileViewWithMainCtrl.edtRenameKeyDown(Sender: TObject;
-  var Key: Word; Shift: TShiftState);
-begin
-  if key=VK_RETURN then
-    keyDownText:= originalText
-  else if key=VK_ESCAPE then
-    keyDownText:= edtRename.Text;
-end;
-
-procedure TFileViewWithMainCtrl.edtRenameOnChange(Sender: TObject);
-begin
-  originalText:= edtRename.Text;
-end;
-
-procedure TFileViewWithMainCtrl.edtRenameKeyUp(Sender: TObject;
-  var Key: Word; Shift: TShiftState);
-var
-  currentText: String;
-begin
-  currentText:= edtRename.Text;
-  if (Key=VK_RETURN) or (key=VK_ESCAPE) then
-  begin
-      if currentText<>keyDownText then
-      begin
-        // From the text has been changed,
-        // the EditButton is in the IME state, just return
-        Key:= 0;
-        exit;
-      end;
-  end;
-  handleKey( Sender, Key, Shift );
-end;
-{$ENDIF}
-
-procedure TFileViewWithMainCtrl.handleKey(Sender: TObject;
-  var Key: Word; Shift: TShiftState);
-var
-  NewFileName: String;
-  OldFileNameAbsolute: String;
-begin
-
-  case Key of
-    VK_ESCAPE:
-      begin
-        Key := 0;
-        edtRename.Visible:=False;
-        SetFocus;
-      end;
-
-    VK_RETURN,
-    VK_SELECT:
-      begin
-        Key := 0; // catch the enter
-
-        NewFileName         := edtRename.Text;
-        OldFileNameAbsolute := edtRename.Hint;
-
-        try
-          case RenameFile(FileSource, FRenameFile, NewFileName, True) of
-            sfprSuccess:
-              begin
-                edtRename.Visible:=False;
-                SetActiveFile(CurrentPath + NewFileName);
-                SetFocus;
-              end;
-            sfprError:
-              msgError(Format(rsMsgErrRename, [ExtractFileName(OldFileNameAbsolute), NewFileName]));
-          end;
-
-        except
-          on e: EInvalidFileProperty do
-            msgError(Format(rsMsgErrRename + ':' + LineEnding + '%s (%s)', [ExtractFileName(OldFileNameAbsolute), NewFileName, rsMsgInvalidFileName, e.Message]));
-        end;
-      end;
-
-{$IFDEF LCLGTK2}
-    // Workaround for GTK2 - up and down arrows moving through controls.
-    VK_UP,
-    VK_DOWN:
-      Key := 0;
-{$ENDIF}
-
-{$IFDEF LCLWIN32}
-    // Workaround for Win32 - right arrow must clear selection at first move.
-    VK_RIGHT:
-      begin
-        if (Shift = []) and (edtRename.SelLength > 0) then
-        begin
-          Key := edtRename.CaretPos.X;
-          edtRename.SelLength := 0;
-          edtRename.CaretPos := Classes.Point(Key, 0);
-          Key := 0;
-        end;
-        FRenFile.UserManualEdit:=True; // user begin manual edit - no need cycle Name,Ext,FullName selection
-      end;
-     VK_LEFT:
-        FRenFile.UserManualEdit:=True; // user begin manual edit - no need cycle Name,Ext,FullName selection
-
-{$ENDIF}
-  end;
-end;
-
 
 procedure TFileViewWithMainCtrl.edtRenameMouseDown(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -1587,6 +1705,10 @@ begin
     SetFocus;
   end;
   inherited AfterChangePath;
+  if IsMouseSelecting then
+  begin
+    MouseStateReset;
+  end;
 end;
 
 {$IFDEF LCLGTK2}
@@ -1606,10 +1728,13 @@ end;
 
 procedure TFileViewWithMainCtrl.ShowRenameFileEditInitSelect(Data: PtrInt);
 begin
-  if gRenameSelOnlyName and not (FRenameFile.IsDirectory or FRenameFile.IsLinkToDirectory) then
-     RenameSelectPart(rfatName)
-  else
-     RenameSelectPart(rfatFull);
+  if Assigned(FRenameFile) then
+  begin
+    if gRenameSelOnlyName and not (FRenameFile.IsDirectory or FRenameFile.IsLinkToDirectory) then
+      RenameSelectPart(rfatName)
+    else
+      RenameSelectPart(rfatFull);
+  end;
 end;
 
 procedure TFileViewWithMainCtrl.ShowRenameFileEdit(var AFile: TFile);
@@ -1622,7 +1747,7 @@ begin
   FRenFile.LenNam := FRenFile.LenFul - FRenFile.LenExt;
 
 
-  if edtRename.Visible then
+  if edtRename.Visible and (edtRename.Tag < 2) then
   begin
     if AFile.IsDirectory or AFile.IsLinkToDirectory then Exit;
     if FRenFile.UserManualEdit then FRenFile.CylceFinished:=True;

@@ -67,6 +67,9 @@ For IPv6 support you must have new API!
 {$ifdef darwin}
 {$DEFINE SOCK_HAS_SINLEN}               // BSD definition of scoketaddr
 {$endif}
+{$ifdef haiku}
+{$DEFINE SOCK_HAS_SINLEN}               // BSD definition of scoketaddr
+{$endif}
 
 interface
 
@@ -103,7 +106,9 @@ type
 const
   FIONREAD        = termio.FIONREAD;
   FIONBIO         = termio.FIONBIO;
+{$IFNDEF HAIKU}
   FIOASYNC        = termio.FIOASYNC;
+{$ENDIF}
 
 const
   IPPROTO_IP     =   0;		{ Dummy					}
@@ -212,12 +217,21 @@ Const
 
   SOMAXCONN       = 1024;
 
+{$IFDEF HAIKU}
+  IPV6_UNICAST_HOPS     = 27;
+{$ELSE}
   IPV6_UNICAST_HOPS     = sockets.IPV6_UNICAST_HOPS;
+{$ENDIF}
   IPV6_MULTICAST_IF     = sockets.IPV6_MULTICAST_IF;
   IPV6_MULTICAST_HOPS   = sockets.IPV6_MULTICAST_HOPS;
   IPV6_MULTICAST_LOOP   = sockets.IPV6_MULTICAST_LOOP;
+{$IFDEF HAIKU}
+  IPV6_JOIN_GROUP       = 28;
+  IPV6_LEAVE_GROUP      = 29;
+{$ELSE}
   IPV6_JOIN_GROUP       = sockets.IPV6_JOIN_GROUP;
   IPV6_LEAVE_GROUP      = sockets.IPV6_LEAVE_GROUP;
+{$ENDIF}
 
 const
   SOCK_STREAM     = 1;               { stream socket }
@@ -231,9 +245,9 @@ const
 
 { Address families. }
 
-  AF_UNSPEC       = 0;               { unspecified }
-  AF_INET         = 2;               { internetwork: UDP, TCP, etc. }
-  AF_INET6        = 10;              { Internetwork Version 6 }
+  AF_UNSPEC       = 0;                { unspecified }
+  AF_INET         = sockets.AF_INET;  { internetwork: UDP, TCP, etc. }
+  AF_INET6        = sockets.AF_INET6; { Internetwork Version 6 }
   AF_MAX          = 24;
 
 { Protocol families, same as address families for now. }
@@ -254,13 +268,29 @@ const
 
   MSG_OOB       = sockets.MSG_OOB;      // Process out-of-band data.
   MSG_PEEK      = sockets.MSG_PEEK;     // Peek at incoming messages.
-  {$ifdef DARWIN}
+  {$if defined(DARWIN)}
   MSG_NOSIGNAL  = $20000;  // Do not generate SIGPIPE.
                            // Works under MAC OS X, but is undocumented,
                            // So FPC doesn't include it
+  {$elseif defined(HAIKU)}
+  MSG_NOSIGNAL   = $0800;
   {$else}
-   MSG_NOSIGNAL  = sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE.
+  MSG_NOSIGNAL   = sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE.
   {$endif}
+
+{$IF DEFINED(HAIKU)}
+const
+  ESysESTALE = (B_POSIX_ERROR_BASE + 40);
+  ESysENOTSOCK = (B_POSIX_ERROR_BASE + 44);
+  ESysEHOSTDOWN = (B_POSIX_ERROR_BASE + 45);
+  ESysEDESTADDRREQ = (B_POSIX_ERROR_BASE + 48);
+  ESysEDQUOT = (B_POSIX_ERROR_BASE + 49);
+  // Fake error codes
+  ESysEUSERS = (B_POSIX_ERROR_BASE + 128);
+  ESysEREMOTE = (B_POSIX_ERROR_BASE + 129);
+  ESysETOOMANYREFS = (B_POSIX_ERROR_BASE + 130);
+  ESysESOCKTNOSUPPORT = (B_POSIX_ERROR_BASE + 131);
+{$ENDIF}
 
 const
   WSAEINTR = ESysEINTR;
@@ -416,6 +446,86 @@ function ResolvePort(Port: string; Family, SockProtocol, SockType: integer): Wor
 {==============================================================================}
 implementation
 
+uses
+  InitC;
+
+{$if defined(LINUX) or defined(OPENBSD)}
+  {$define FIRST_ADDR_THEN_CANONNAME}
+{$elseif defined(FREEBSD) or defined(NETBSD) or defined(DRAGONFLY) or defined(SOLARIS) or defined(ANDROID) or defined(DARWIN) or defined(HAIKU)}
+  {$define FIRST_CANONNAME_THEN_ADDR}
+{$else}
+  {$error fatal 'Please consult the netdb.h file for your system to determine the order of ai_addr and ai_canonname'}
+{$endif}
+
+{$push}{$packrecords c}
+type
+  PAddrInfo = ^addrinfo;
+  addrinfo = record
+    ai_flags: cint;          {* AI_PASSIVE, AI_CANONNAME, AI_NUMERICHOST *}
+    ai_family: cint;         {* PF_xxx *}
+    ai_socktype: cint;       {* SOCK_xxx *}
+    ai_protocol: cint;       {* 0 or IPPROTO_xxx for IPv4 and IPv6 *}
+    ai_addrlen: TSockLen;    {* length of ai_addr *}
+{$ifdef FIRST_CANONNAME_THEN_ADDR}
+    ai_canonname: PAnsiChar; {* canonical name for hostname *}
+    ai_addr: psockaddr;      {* binary address *}
+{$endif}
+{$ifdef FIRST_ADDR_THEN_CANONNAME}
+    ai_addr: psockaddr;      {* binary address *}
+    ai_canonname: PAnsiChar; {* canonical name for hostname *}
+{$endif}
+    ai_next: PAddrInfo;      {* next structure in linked list *}
+  end;
+  TAddrInfo = addrinfo;
+  PPAddrInfo = ^PAddrInfo;
+{$pop}
+
+function  getaddrinfo(name, service: PAnsiChar; hints: PAddrInfo; res: PPAddrInfo): cint; cdecl; external clib;
+procedure freeaddrinfo(ai: PAddrInfo); cdecl; external clib;
+
+function ResolveName(const HostName: String; Addresses: Pointer; MaxAddresses, Family: Integer): Integer; overload;
+var
+  hints: TAddrInfo;
+  res, ai: PAddrInfo;
+begin
+  Result:= -1;
+  if MaxAddresses = 0 then Exit;
+  res:= nil;
+  hints:= Default(TAddrInfo);
+  hints.ai_family:= Family;
+  hints.ai_socktype:= SOCK_STREAM;
+  if (getaddrinfo(PAnsiChar(HostName), nil, @hints, @res) <> 0) or (res = nil) then
+    Exit;
+  ai:= res;
+  Result:= 0;
+  repeat
+    if ai^.ai_family = Family then
+    begin
+      if Family = AF_INET then
+      begin
+        Move(PInetSockAddr(ai^.ai_addr)^.sin_addr, Addresses^, SizeOf(TInAddr));
+        Inc(PInAddr(Addresses));
+      end
+      else begin
+        Move(PInetSockAddr6(ai^.ai_addr)^.sin6_addr, Addresses^, SizeOf(TIn6Addr));
+        Inc(PIn6Addr(Addresses));
+      end;
+      Inc(Result);
+    end;
+    ai:= ai^.ai_next;
+  until (ai = nil) or (Result >= MaxAddresses);
+  freeaddrinfo(res);
+end;
+
+function ResolveName(HostName: String; var Addresses: array of THostAddr): Integer; overload;
+begin
+  Result:= ResolveName(HostName, @Addresses, Length(Addresses), AF_INET);
+end;
+
+function ResolveName6(HostName: String; var Addresses: array of THostAddr6): Integer;
+begin
+  Result:= ResolveName(HostName, @Addresses, Length(Addresses), AF_INET6);
+end;
 
 function IN6_IS_ADDR_UNSPECIFIED(const a: PInAddr6): boolean;
 begin

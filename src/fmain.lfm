@@ -6,6 +6,8 @@ object frmMain: TfrmMain
   Caption = 'Double Commander'
   ClientHeight = 370
   ClientWidth = 760
+  Constraints.MaxHeight = 32767
+  Constraints.MaxWidth = 32767
   KeyPreview = True
   OnClose = frmMainClose
   OnCloseQuery = FormCloseQuery
@@ -14,6 +16,7 @@ object frmMain: TfrmMain
   OnKeyDown = FormKeyDown
   OnKeyPress = FormKeyPress
   OnKeyUp = FormKeyUp
+  OnResize = FormResize
   OnShow = frmMainShow
   OnUTF8KeyPress = FormUTF8KeyPress
   OnWindowStateChange = FormWindowStateChange
@@ -79,6 +82,7 @@ object frmMain: TfrmMain
       Align = alTop
       AutoSize = True
       EdgeBorders = [ebTop, ebBottom]
+      OnResize = pnlDiskResize
       Visible = False
       object pnlDskLeft: TPanel
         AnchorSideLeft.Control = pnlDisk
@@ -283,6 +287,7 @@ object frmMain: TfrmMain
             BorderSpacing.Right = 2
             ParentColor = False
             OnDblClick = lblDriveInfoDblClick
+            OnResize = lblDriveInfoResize
           end
         end
       end
@@ -432,6 +437,7 @@ object frmMain: TfrmMain
             BorderSpacing.Right = 2
             ParentColor = False
             OnDblClick = lblDriveInfoDblClick
+            OnResize = lblDriveInfoResize
           end
         end
       end
@@ -505,10 +511,11 @@ object frmMain: TfrmMain
       object lblCommandPath: TLabel
         AnchorSideTop.Control = edtCommand
         AnchorSideTop.Side = asrCenter
-        Left = 0
+        Left = 2
         Height = 15
         Top = 6
         Width = 24
+        BorderSpacing.Left = 2
         Caption = 'Path'
         ParentColor = False
         ShowAccelChar = False
@@ -524,7 +531,8 @@ object frmMain: TfrmMain
         Top = 2
         Width = 732
         Anchors = [akTop, akLeft, akRight]
-        BorderSpacing.Left = 4
+        BorderSpacing.Left = 2
+        BorderSpacing.Right = 2
         ItemHeight = 15
         OnExit = edtCommandExit
         OnKeyDown = edtCommandKeyDown
@@ -1222,7 +1230,7 @@ object frmMain: TfrmMain
       end
     end
     object mnuNetwork: TMenuItem
-      Caption = 'Network'
+      Caption = '&Network'
       object miNetworkConnect: TMenuItem
         Action = actNetworkConnect
       end
@@ -1334,7 +1342,7 @@ object frmMain: TfrmMain
       end
     end
     object mnuFavoriteTabs: TMenuItem
-      Caption = 'Favorites'
+      Caption = 'F&avorites'
       object mnuCreateNewFavoriteTabs: TMenuItem
         Action = actSaveFavoriteTabs
       end
@@ -2593,6 +2601,7 @@ object frmMain: TfrmMain
       Tag = 17
       Category = 'Command Line'
       Caption = 'Toggle fullscreen mode console'
+      OnExecute = actExecute
     end
     object actTreeView: TAction
       Tag = 16
@@ -2827,6 +2836,25 @@ object frmMain: TfrmMain
       Category = 'Miscellaneous'
       Caption = 'Load List'
       Hint = 'Load list of files/folders from the specified text file'
+      OnExecute = actExecute
+    end
+    object actSaveFileDetailsToFile: TAction
+      Tag = 10
+      Category = 'Mark'
+      Caption = 'Save all shown columns to file'
+      OnExecute = actExecute
+    end
+    object actShowTabsList: TAction
+      Tag = 21
+      Category = 'Tabs'
+      Caption = 'Show Tabs List'
+      Hint = 'Show list of all open tabs'
+      OnExecute = actExecute
+    end
+    object actMapNetworkDrive: TAction
+      Tag = 6
+      Category = 'Network'
+      Caption = 'Map Network Drive...'
       OnExecute = actExecute
     end
   end

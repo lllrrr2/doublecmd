@@ -3,7 +3,7 @@
    -------------------------------------------------------------------------
    This module contains classes with UTF8 file names support.
 
-   Copyright (C) 2008-2019 Alexander Koblov (alexx2000@mail.ru)
+   Copyright (C) 2008-2024 Alexander Koblov (alexx2000@mail.ru)
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -34,20 +34,32 @@ type
   { TFileStreamEx class }
 
   TFileStreamEx = class(THandleStream)
+  private
+    FDirty: Int64;
+    FAutoSync: Boolean;
+    FDirtyLimit: Int64;
+    procedure SetAutoSync(AValue: Boolean);
   protected
     FFileName: String;
-    procedure SetSize64(const NewSize: Int64); override;
+    procedure Sync(AWritten: Int64);
+    procedure SetCapacity(const NewCapacity: Int64);
   public
     constructor Create(const AFileName: String; Mode: LongWord); virtual; overload;
     destructor Destroy; override;
     function Flush: Boolean;
     function Read(var Buffer; Count: LongInt): LongInt; override;
+    function Write(const Buffer; Count: LongInt): LongInt; override;
+    property DirtyLimit: Int64 read FDirtyLimit write FDirtyLimit;
+    property AutoSync: Boolean read FAutoSync write SetAutoSync;
+    property Capacity: Int64 write SetCapacity;
     property FileName: String read FFileName;
   end; 
 
   { TStringListEx }
 
   TStringListEx = class(TStringList)
+  protected
+    function DoCompareText(const S1, S2: String): PtrInt; override;
   public
     function IndexOfValue(const Value: String): Integer;
     procedure LoadFromFile(const FileName: String); override;
@@ -60,8 +72,8 @@ type
   private
     FReadOnly: Boolean;
   public
-    constructor Create(const AFileName: String; Mode: Word); virtual;
-    constructor Create(const AFileName: String; AEscapeLineFeeds : Boolean = False); override;
+    constructor Create(const AFileName: String; Mode: Word; AOptions: TIniFileOptions = []); virtual;
+    constructor Create(const AFileName: String; AOptions: TIniFileOptions = []); override;
     procedure UpdateFile; override;
   public
     property ReadOnly: Boolean read FReadOnly;
@@ -70,13 +82,84 @@ type
 implementation
 
 uses
-  DCOSUtils;
+  DCOSUtils, LazUTF8;
 
 { TFileStreamEx }
 
-procedure TFileStreamEx.SetSize64(const NewSize: Int64);
+procedure TFileStreamEx.SetAutoSync(AValue: Boolean);
+const
+  DIRTY_LIMIT = 1024 * 1024;
 begin
-  FileAllocate(Handle, NewSize);
+  FAutoSync:= AValue;
+  if AValue and (FDirtyLimit = 0) then
+  begin
+    FDirtyLimit:= DIRTY_LIMIT;
+  end;
+end;
+
+procedure TFileStreamEx.Sync(AWritten: Int64);
+const
+  TARGET_LATENCY_LOW  = 900;
+  TARGET_LATENCY_HIGH = 1100;
+  DIRTY_LIMIT_LOW  = 512 * 1024;
+  DIRTY_LIMIT_HIGH = MaxLongInt + 1;
+var
+  T1, T2: QWord;
+  Elapsed: Double;
+  Slowdown: Double;
+begin
+  FDirty+= AWritten;
+
+  if FDirty < FDirtyLimit then
+    Exit;
+
+  FDirty:= 0;
+  T1:= GetTickCount64;
+
+  if not FileFlushData(Handle) then
+    Exit;
+
+  T2:= GetTickCount64;
+
+  Elapsed:= (T2 - T1);
+
+  if (Elapsed > TARGET_LATENCY_HIGH) then
+  begin
+    if (FDirtyLimit > DIRTY_LIMIT_LOW) then
+    begin
+      Slowdown:= Elapsed / TARGET_LATENCY_HIGH;
+
+      if (Slowdown > 2) then
+          FDirtyLimit := Round(FDirtyLimit / Slowdown)
+       else begin
+          FDirtyLimit := Round(FDirtyLimit * 0.7);
+      end;
+
+      if (FDirtyLimit < DIRTY_LIMIT_LOW) then
+        FDirtyLimit := DIRTY_LIMIT_LOW
+      else begin
+        FDirtyLimit := (FDirtyLimit div 4096 * 4096);
+      end;
+    end;
+  end
+  else if (Elapsed < TARGET_LATENCY_LOW) then
+  begin
+    if FDirtyLimit < DIRTY_LIMIT_HIGH then
+    begin
+      FDirtyLimit := Round(FDirtyLimit * 1.3);
+
+      if (FDirtyLimit > DIRTY_LIMIT_HIGH) then
+        FDirtyLimit := DIRTY_LIMIT_HIGH
+      else begin
+        FDirtyLimit := (FDirtyLimit div 4096 * 4096);
+      end;
+    end;
+  end;
+end;
+
+procedure TFileStreamEx.SetCapacity(const NewCapacity: Int64);
+begin
+  FileAllocate(Handle, NewCapacity);
 end;
 
 constructor TFileStreamEx.Create(const AFileName: String; Mode: LongWord);
@@ -121,7 +204,21 @@ begin
     raise EReadError.Create(mbSysErrorMessage(GetLastOSError));
 end;
 
+function TFileStreamEx.Write(const Buffer; Count: LongInt): LongInt;
+begin
+  Result:= inherited Write(Buffer, Count);
+  if FAutoSync and (Result > 0) then Sync(Result);
+end;
+
 { TStringListEx }
+
+function TStringListEx.DoCompareText(const S1, S2: String): PtrInt;
+begin
+  if CaseSensitive then
+    Result:= UTF8CompareStr(S1, S2)
+  else
+    Result:= UTF8CompareText(S1, S2);
+end;
 
 function TStringListEx.IndexOfValue(const Value: String): Integer;
 var
@@ -174,13 +271,14 @@ end;
 
 { TIniFileEx }
 
-constructor TIniFileEx.Create(const AFileName: String; Mode: Word);
+constructor TIniFileEx.Create(const AFileName: String; Mode: Word;
+  AOptions: TIniFileOptions);
 var
   slLines : TStringListEx;
 begin
   FReadOnly := ((Mode and $03) = fmOpenRead);
 
-  inherited Create(EmptyStr);
+  inherited Create(EmptyStr, AOptions);
 
   if ((Mode and $03) <> fmOpenWrite) then
   begin
@@ -198,7 +296,7 @@ begin
   Rename(AFileName, False);
 end;
 
-constructor TIniFileEx.Create(const AFileName: String; AEscapeLineFeeds: Boolean);
+constructor TIniFileEx.Create(const AFileName: String; AOptions: TIniFileOptions);
 var
   Mode: Word;
 begin
@@ -209,7 +307,7 @@ begin
   else begin
     Mode := fmOpenRead or fmShareDenyNone;
   end;
-  Create(AFileName, Mode);
+  Create(AFileName, Mode, AOptions);
 end;
 
 procedure TIniFileEx.UpdateFile;

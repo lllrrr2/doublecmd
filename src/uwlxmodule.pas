@@ -4,7 +4,7 @@
    WLX-API implementation (TC WLX-API v2.0).
 
    Copyright (C) 2008  Dmitry Kolomiets (B4rr4cuda@rambler.ru)
-   Copyright (C) 2009-2020 Alexander Koblov (alexx2000@mail.ru)
+   Copyright (C) 2009-2023 Alexander Koblov (alexx2000@mail.ru)
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -23,6 +23,9 @@
 unit uWlxModule;
 
 {$mode objfpc}{$H+}
+{$IFDEF DARWIN}
+{$modeswitch objectivec1}
+{$ENDIF}
 
 interface
 
@@ -44,6 +47,12 @@ uses
   {$ENDIF}
   {$IFDEF LCLQT5}
   , qt5, qtwidgets
+  {$ENDIF}
+  {$IFDEF LCLQT6}
+  , qt6, qtwidgets
+  {$ENDIF}
+  {$IFDEF LCLCOCOA}
+  , CocoaAll
   {$ENDIF}
   {$IF DEFINED(MSWINDOWS) and (DEFINED(LCLQT5) or DEFINED(DARKWIN))}
   , uDarkStyle
@@ -204,7 +213,7 @@ begin
   if Assigned(WindowProc) then
     Result := CallWindowProc(WindowProc, hWnd, Msg, wParam, lParam)
   else begin
-    Result := DefWindowProc(hWnd, Msg, wParam, lParam);
+    Result := DefWindowProcW(hWnd, Msg, wParam, lParam);
   end;
   if (Result = 0) and (Msg = WM_COMMAND) and (lParam <> 0) then
   begin
@@ -227,7 +236,7 @@ begin
   end;
 {$ELSEIF DEFINED(LCLGTK) or DEFINED(LCLGTK2)}
   ParentWin := HWND(GetFixedWidget(Pointer(ParentWin)));
-{$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5)}
+{$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5) or DEFINED(LCLQT6)}
   ParentWin := HWND(TQtWidget(ParentWin).GetContainerWidget);
 {$ENDIF}
 end;
@@ -278,6 +287,7 @@ end;
 function TWlxModule.LoadModule: Boolean;
 begin
   // DCDebug('WLXM LoadModule entered');
+  if (FModuleHandle <> NilHandle) then Exit(True);
   FModuleHandle := mbLoadLibrary(mbExpandFileName(Self.FileName));
   Result := (FModuleHandle <> NilHandle);
   if FModuleHandle = NilHandle then Exit;
@@ -307,7 +317,7 @@ end;
 
 procedure TWlxModule.UnloadModule;
 begin
-{$IF NOT (DEFINED(LCLQT) or DEFINED(LCLQT5) or DEFINED(LCLGTK2))}
+{$IF NOT (DEFINED(LCLQT) or DEFINED(LCLQT5) or DEFINED(LCLQT6) or DEFINED(LCLGTK2))}
 {$IF (not DEFINED(LINUX)) or ((FPC_VERSION > 2) or ((FPC_VERSION=2) and (FPC_RELEASE >= 5)))}
   if FModuleHandle <> 0 then
     FreeLibrary(FModuleHandle);
@@ -359,7 +369,7 @@ begin
   if FPluginWindow <> 0 then
   begin
     // Subclass viewer window to catch WM_COMMAND message.
-    Result:= HWND(SetWindowLongPtr(ParentWin, GWL_WNDPROC, LONG_PTR(@ListerProc)));
+    Result:= HWND(SetWindowLongPtrW(ParentWin, GWL_WNDPROC, LONG_PTR(@ListerProc)));
     Windows.SetPropW(ParentWin, WindowProcAtom, Result);
     // Subclass plugin window to catch some hotkeys like 'n' or 'p'.
     Result := HWND(SetWindowLongPtr(FPluginWindow, GWL_WNDPROC, LONG_PTR(@PluginProc)));
@@ -380,9 +390,13 @@ function TWlxModule.CallListLoadNext(ParentWin: HWND; FileToLoad: String; ShowFl
 begin
   WlxPrepareContainer(ParentWin);
 
-{$IF DEFINED(MSWINDOWS) and DEFINED(LCLQT5)}
+{$IF DEFINED(MSWINDOWS) and (DEFINED(LCLQT5) or DEFINED(DARKWIN))}
   if g_darkModeEnabled then
-    ShowFlags:= ShowFlags or lcp_darkmode or lcp_darkmodenative;
+  begin
+    ShowFlags:= ShowFlags or lcp_darkmode;
+    if g_darkModeSupported then
+      ShowFlags:= ShowFlags or lcp_darkmodenative;
+  end;
 {$ENDIF}
 
   if Assigned(ListLoadNextW) then
@@ -399,7 +413,7 @@ begin
   try
 {$IF DEFINED(LCLWIN32)}
     SetWindowLongPtr(FPluginWindow, GWL_WNDPROC, LONG_PTR(RemovePropW(FPluginWindow, WindowProcAtom)));
-    SetWindowLongPtr(GetParent(FPluginWindow), GWL_WNDPROC, LONG_PTR(RemovePropW(GetParent(FPluginWindow), WindowProcAtom)));
+    SetWindowLongPtrW(GetParent(FPluginWindow), GWL_WNDPROC, LONG_PTR(RemovePropW(GetParent(FPluginWindow), WindowProcAtom)));
 {$ENDIF}
     if Assigned(ListCloseWindow) then
       ListCloseWindow(FPluginWindow)
@@ -407,11 +421,15 @@ begin
     else DestroyWindow(FPluginWindow)
 {$ELSEIF DEFINED(LCLGTK) or DEFINED(LCLGTK2)}
     else gtk_widget_destroy(PGtkWidget(FPluginWindow));
-{$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5)}
+{$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5) or DEFINED(LCLQT6)}
     else QWidget_Destroy(QWidgetH(FPluginWindow));
 {$ENDIF}
   finally
     FPluginWindow := 0;
+{$IF DEFINED(MSWINDOWS)}
+    // Reset current directory
+    SetCurrentDirectoryW(PWideChar(CeUtf8ToUtf16(gpExePath)));
+{$ENDIF}
   end;
   //  DCDebug('Call ListCloseWindow success');
 end;
@@ -463,8 +481,8 @@ function TWlxModule.FileParamVSDetectStr(AFileName: String; bForce: Boolean): Bo
 begin
   if not Enabled then Exit(False);
   FParser.IsForce:= bForce;
-  DCDebug('DetectStr = ' + FParser.DetectStr);
-  DCDebug('AFileName = ' + AFileName);
+  // DCDebug('DetectStr = ' + FParser.DetectStr);
+  // DCDebug('AFileName = ' + AFileName);
   Result := FParser.TestFileResult(AFileName);
 end;
 
@@ -472,7 +490,7 @@ procedure TWlxModule.SetFocus;
 begin
   {$IF DEFINED(MSWINDOWS)}
   Windows.SetFocus(FPluginWindow);
-  {$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5)}
+  {$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5) or DEFINED(LCLQT6)}
   QWidget_setFocus(QWidgetH(FPluginWindow));
   {$ELSEIF DEFINED(LCLGTK2)}
   gtk_widget_grab_focus(PGtkWidget(FPluginWindow));
@@ -491,12 +509,14 @@ begin
     MoveWindow(FPluginWindow, Left, Top, Right - Left, Bottom - Top, True);
     {$ELSEIF DEFINED(LCLWIN32)}
     MoveWindow(FPluginWindow, Left, Top, Right - Left, Bottom - Top, True);
-    {$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5)}
+    {$ELSEIF DEFINED(LCLQT) or DEFINED(LCLQT5) or DEFINED(LCLQT6)}
     QWidget_move(QWidgetH(FPluginWindow), Left, Top);
     QWidget_resize(QWidgetH(FPluginWindow), Right - Left, Bottom - Top);
     {$ELSEIF DEFINED(LCLGTK2)}
     gtk_widget_set_uposition(PGtkWidget(FPluginWindow), Left, -1);
     gtk_widget_set_usize(PGtkWidget(FPluginWindow), Right - Left, Bottom - Top);
+    {$ELSEIF DEFINED(LCLCOCOA)}
+    NSView(FPluginWindow).setFrame( NSMakeRect(Left,Top,Width,Height) );
     {$ENDIF}
   end;
 end;

@@ -43,6 +43,9 @@ const
   DM_LISTSET              = DM_FIRST+36;
   DM_SETPROGRESSVALUE     = DM_FIRST+37;
   DM_SETPROGRESSSTYLE     = DM_FIRST+38;
+  DM_SETPASSWORDCHAR      = DM_FIRST+39;
+  DM_LISTCLEAR            = DM_FIRST+40;
+  DM_TIMERSETINTERVAL     = DM_FIRST+41;
 
   // events messages
   DN_FIRST                = $1000;
@@ -52,12 +55,21 @@ const
   DN_GOTFOCUS             = DN_FIRST+4; // Sent when the dialog item gets input focus
   DN_INITDIALOG           = DN_FIRST+5; // Sent before showing the dialog
   DN_KILLFOCUS            = DN_FIRST+6; // Sent before a dialog item loses the input focus
+  DN_TIMER                = DN_FIRST+7; // Sent when a timer expires
 
   DN_KEYDOWN              = DM_KEYDOWN;
   DN_KEYUP                = DM_KEYUP;
   DN_CLOSE                = DM_CLOSE; // Sent before the dialog is closed
 
   DM_USER                 = $4000; // Starting value for user defined messages
+
+const
+  // Set/Get Property
+  TK_STRING = 1;
+  TK_FLOAT  = 2;
+  TK_INT32  = 3;
+  TK_INT64  = 4;
+  TK_BOOL   = 5;
 
 const
   // MessageBox: To indicate the buttons displayed in the message box,
@@ -91,6 +103,10 @@ const
   ID_NO         = 7;
   ID_CLOSE      = 8;
   ID_HELP       = 9;
+  // DialogBoxParam: Flags
+  DB_LFM        = 0; // Data contains a form in the LFM format
+  DB_LRS        = 1; // Data contains a form in the LRS format
+  DB_FILENAME   = 2; // Data contains a form file name (*.lfm)
 
 const
   EXT_MAX_PATH = 16384; // 16 Kb
@@ -103,9 +119,15 @@ type
   { Definition of callback functions called by the DLL }
   TInputBoxProc = function(Caption, Prompt: PAnsiChar; MaskInput: LongBool; Value: PAnsiChar; ValueMaxLen: Integer): LongBool; {$IFDEF MSWINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
   TMessageBoxProc = function(Text, Caption: PAnsiChar; Flags: Longint): Integer; {$IFDEF MSWINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
+  TMsgChoiceBoxProc = function(Text, Caption: PAnsiChar; Buttons: PPAnsiChar; BtnDef, BtnEsc: Integer): Integer; {$IFDEF MSWINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
   TDialogBoxLFMProc = function(LFMData: Pointer; DataSize: LongWord; DlgProc: TDlgProc): LongBool; {$IFDEF MSWINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
   TDialogBoxLRSProc = function(LRSData: Pointer; DataSize: LongWord; DlgProc: TDlgProc): LongBool; {$IFDEF MSWINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
   TDialogBoxLFMFileProc = function(lfmFileName: PAnsiChar; DlgProc: TDlgProc): LongBool; {$IFDEF MSWINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
+  TDialogBoxParamProc = function(Data: Pointer; DataSize: LongWord; DlgProc: TDlgProc; Flags: LongWord; UserData, Reserved: Pointer): UIntPtr; {$IFDEF MSWINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
+  TTranslateStringProc = function(Translation: Pointer; Identifier, Original: PAnsiChar; Output: PAnsiChar; OutLen: Integer): Integer {$IFDEF MSWINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
+  TSetProperty = function(pDlg: UIntPtr; DlgItemName, PropName: PAnsiChar; PropValue: Pointer; PropType: Integer): PtrInt; {$IFDEF MSWINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
+  TGetProperty = function(pDlg: UIntPtr; DlgItemName, PropName: PAnsiChar; PropValue: Pointer; PropType, PropSize: Integer): PtrInt; {$IFDEF MSWINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
+  TCreateComponent = function(pDlg: UIntPtr; Parent, DlgItemName, DlgItemClass: PAnsiChar; Reserved: Pointer): UIntPtr; {$IFDEF MSWINDOWS}stdcall{$ELSE}cdecl{$ENDIF};
 
 type
   PExtensionStartupInfo = ^TExtensionStartupInfo;
@@ -123,8 +145,16 @@ type
     DialogBoxLRS: TDialogBoxLRSProc;
     DialogBoxLFMFile: TDialogBoxLFMFileProc;
     SendDlgMsg: TDlgProc;
+    Translation: Pointer;
+    TranslateString: TTranslateStringProc;
+    VersionAPI: UIntPtr;
+    MsgChoiceBox: TMsgChoiceBoxProc;
+    DialogBoxParam: TDialogBoxParamProc;
+    SetProperty: TSetProperty;
+    GetProperty: TGetProperty;
+    CreateComponent: TCreateComponent;
     // Reserved for future API extension
-    Reserved: packed array [0..Pred(4096 * SizeOf(Pointer))] of Byte;
+    Reserved: packed array [0..Pred(4088 * SizeOf(Pointer))] of Byte;
   end;
 
 type

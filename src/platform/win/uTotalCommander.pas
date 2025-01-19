@@ -3,7 +3,7 @@
     -------------------------------------------------------------------------
     Total Commander integration functions
 
-    Copyright (C) 2009-2019 Alexander Koblov (alexx2000@mail.ru)
+    Copyright (C) 2009-2023 Alexander Koblov (alexx2000@mail.ru)
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -62,6 +62,7 @@ function ConvertStringToTCString(sString: string): ansistring;
 function ReplaceDCEnvVars(const sText: string): string;
 function ReplaceTCEnvVars(const sText: string): string;
 function areWeInSituationToPlayWithTCFiles: boolean;
+function GetActualTCIni(NormalizedTCIniFilename, SectionName: String): String;
 function GetTCEquivalentCommandToDCCommand(DCCommand: string; var TCIndexOfCommand: integer): string;
 function GetTCIconFromDCIconAndCreateIfNecessary(const DCIcon: string): string;
 function GetTCEquivalentCommandIconToDCCommandIcon(DCIcon: string; TCIndexOfCommand: integer): string;
@@ -89,7 +90,7 @@ type
   end;
 
 const
-  NUMBEROFCOMMANDS = 461;
+  NUMBEROFCOMMANDS = 465;
 
   //jcf:format=off
   COMMANDS_LIST_TC: array[1..NUMBEROFCOMMANDS] of TTCommandEquivalence =
@@ -433,6 +434,10 @@ const
     (TCCommand: 'cm_ToggleLockDcaCurrentTab';   TCIcon: -1; DCCommand: '';                          DCParameters: ''          ), //Same but with dir changes allowed
     (TCCommand: 'cm_ExchangeWithTabs';          TCIcon: 37; DCCommand: '';                          DCParameters: ''          ), //Swap all Tabs
     (TCCommand: 'cm_GoToLockedDir';             TCIcon: -1; DCCommand: '';                          DCParameters: ''          ), //Go to the base dir of locked tab
+    (TCCommand: 'cm_SrcTabsList';               TCIcon: -1; DCCommand: 'cm_ShowTabsList';           DCParameters: ''             ), //Source: Show list of all open tabs
+    (TCCommand: 'cm_TrgTabsList';               TCIcon: -1; DCCommand: 'cm_ShowTabsList';           DCParameters: 'side=inactive'), //Target: Show list of all open tabs
+    (TCCommand: 'cm_LeftTabsList';              TCIcon: -1; DCCommand: 'cm_ShowTabsList';           DCParameters: 'side=left'    ), //Left: Show list of all open tabs
+    (TCCommand: 'cm_RightTabsList';             TCIcon: -1; DCCommand: 'cm_ShowTabsList';           DCParameters: 'side=right'   ), //Right: Show list of all open tabs
     (TCCommand: 'cm_SrcActivateTab1';           TCIcon: -1; DCCommand: 'cm_ActivateTabByIndex';     DCParameters: 'index=1'   ), //Activate first tab
     (TCCommand: 'cm_SrcActivateTab2';           TCIcon: -1; DCCommand: 'cm_ActivateTabByIndex';     DCParameters: 'index=2'   ), //Activate second tab
     (TCCommand: 'cm_SrcActivateTab3';           TCIcon: -1; DCCommand: 'cm_ActivateTabByIndex';     DCParameters: 'index=3'   ), //(Source window)
@@ -732,9 +737,15 @@ var
   ClassName: PChar;
 begin
   ClassName := Stralloc(100);
-  GetClassName(Wnd, ClassName, 99);
-  if ClassName = 'TTOTAL_CMD' then
-    Inc(TCNumberOfInstance);
+  if GetClassName(Wnd, ClassName, 99) > 0 then
+  begin
+    if ClassName = 'TTOTAL_CMD' then
+    begin
+      // Skip Double Commander main window class
+      if GetPropW(Wnd, 'WinControlDC') = 0 then
+        Inc(TCNumberOfInstance);
+    end;
+  end;
   Result := True;
   strDispose(ClassName);
 end;
@@ -750,7 +761,7 @@ begin
   finally
   end;
 
-  Result := (TCNumberOfInstance > 1);
+  Result := (TCNumberOfInstance > 0);
 end;
 
 { areTCRelatedPathsAndFilesDetected }
@@ -1244,6 +1255,22 @@ begin
   finally
     TCToolbarFilenameList.Free;
   end;
+end;
+
+{ GetActualTCIni }
+// Returns actual ini filename when using 'RedirectSection' key
+function GetActualTCIni(NormalizedTCIniFilename, SectionName: String): String;
+var
+  ConfigFile: TIniFileEx;
+begin
+  ConfigFile := TIniFileEx.Create(NormalizedTCIniFilename);
+  Result := ConvertTCStringToString(ConfigFile.ReadString(SectionName, 'RedirectSection', ''));
+  ConfigFile.Free;
+
+  if Result <> '' then
+     Result := GetActualTCIni(ReplaceTCEnvVars(ReplaceEnvVars(Result)), SectionName)
+  else
+     Result := NormalizedTCIniFilename;
 end;
 
 end.

@@ -1,7 +1,7 @@
 (* ***** BEGIN LICENSE BLOCK *****
  * Simple interface to zstd library
  *
- * Copyright (C) 2019 Alexander Koblov (alexx2000@mail.ru)
+ * Copyright (C) 2019-2023 Alexander Koblov (alexx2000@mail.ru)
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -92,6 +92,7 @@ type
     FBufferInSize: UIntPtr;
     FBufferOut: ZSTD_outBuffer;
     FBufferOutPos: UIntPtr;
+    FTotalOut: Int64;
   public
     constructor Create(InStream: TStream);
     destructor Destroy; override;
@@ -104,7 +105,7 @@ function ZSTD_FileSize(const InStream: TStream): UInt64;
 implementation
 
 uses
-  DynLibs;
+  DynLibs, RtlConsts;
 
 const
   libzstd = {$IF DEFINED(MSWINDOWS)}
@@ -147,6 +148,8 @@ var
   ZSTD_createDCtx: function(): PZSTD_DCtx; cdecl;
   ZSTD_freeDCtx: function(dctx: PZSTD_DCtx): csize_t; cdecl;
 
+  ZSTD_DCtx_setMaxWindowSize: function(dctx: PZSTD_DCtx; maxWindowSize: csize_t): csize_t; cdecl;
+
   ZSTD_decompressStream: function(zds: PZSTD_DCtx; output: PZSTD_outBuffer; input: PZSTD_inBuffer): csize_t; cdecl;
 
   ZSTD_isError: function(code: csize_t): cuint; cdecl;
@@ -182,6 +185,7 @@ begin
   @ZSTD_createDCtx:= GetProcAddress(hZstd, 'ZSTD_createDCtx');
   @ZSTD_freeDCtx:= GetProcAddress(hZstd, 'ZSTD_freeDCtx');
 
+  @ZSTD_DCtx_setMaxWindowSize:= GetProcAddress(hZstd, 'ZSTD_DCtx_setMaxWindowSize');
   @ZSTD_decompressStream:= GetProcAddress(hZstd, 'ZSTD_decompressStream');
 
   @ZSTD_isError:= GetProcAddress(hZstd, 'ZSTD_isError');
@@ -219,6 +223,12 @@ end;
 { TZstdDecompressionStream }
 
 constructor TZstdDecompressionStream.Create(InStream: TStream);
+const
+{$IFDEF CPU32}
+  ZSTD_MAXWINDOWSIZE = (1 shl 30);
+{$ELSE}
+  ZSTD_MAXWINDOWSIZE = (1 shl 31);
+{$ENDIF}
 begin
   Initialize;
 
@@ -233,6 +243,8 @@ begin
   FBufferOut.pos:= 0;
   FBufferOut.size := ZSTD_DStreamOutSize();
   FBufferOut.dst:= GetMem(FBufferOut.size);
+
+  ZSTD_Check(ZSTD_DCtx_setMaxWindowSize(FContext, ZSTD_MAXWINDOWSIZE));
 end;
 
 destructor TZstdDecompressionStream.Destroy;
@@ -288,11 +300,21 @@ begin
 
     if (FBufferOut.pos = 0) and (FBufferIn.size = 0) then Break;
   end;
+  Inc(FTotalOut, Result);
 end;
 
 function TZstdDecompressionStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
 begin
-  Result:= -1;
+  if (Offset >= 0) and (Origin = soCurrent) then
+  begin
+    if (Offset > 0) then Discard(Offset);
+    Result:= FTotalOut;
+  end
+  else if (Origin = soBeginning) and (FTotalOut = Offset) then
+    Result:= Offset
+  else begin
+    raise EZstdError.CreateFmt(SStreamInvalidSeek, [ClassName]);
+  end;
 end;
 
 { TZstdCompressionStream }
@@ -319,20 +341,24 @@ var
   AInput: ZSTD_inBuffer;
 begin
   try
-    FillChar({%H-}AInput, SizeOf(ZSTD_inBuffer), 0);
+    if Assigned(FContext) then
+    try
+      FillChar({%H-}AInput, SizeOf(ZSTD_inBuffer), 0);
 
-    repeat
-      FBufferOut.pos:= 0;
+      repeat
+        FBufferOut.pos:= 0;
 
-      ARemaining:= ZSTD_Check(ZSTD_compressStream2(FContext, @FBufferOut, @AInput, ZSTD_e_end));
+        ARemaining:= ZSTD_Check(ZSTD_compressStream2(FContext, @FBufferOut, @AInput, ZSTD_e_end));
 
-      if (FBufferOut.pos > 0) then begin
-        FStream.WriteBuffer(FBufferOut.dst^, FBufferOut.pos);
-      end;
-    until (ARemaining = 0);
+        if (FBufferOut.pos > 0) then begin
+          FStream.WriteBuffer(FBufferOut.dst^, FBufferOut.pos);
+        end;
+      until (ARemaining = 0);
+    finally
+      FreeMem(FBufferOut.dst);
+      ZSTD_freeCCtx(FContext);
+    end;
   finally
-    FreeMem(FBufferOut.dst);
-    ZSTD_freeCCtx(FContext);
     inherited Destroy;
   end;
 end;

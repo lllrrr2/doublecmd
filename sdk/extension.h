@@ -40,6 +40,9 @@
 #define DM_LISTSET DM_FIRST+36
 #define DM_SETPROGRESSVALUE DM_FIRST+37
 #define DM_SETPROGRESSSTYLE DM_FIRST+38
+#define DM_SETPASSWORDCHAR DM_FIRST+39
+#define DM_LISTCLEAR DM_FIRST+40
+#define DM_TIMERSETINTERVAL DM_FIRST+41
 
 /* events messages */
 #define DN_FIRST 0x1000
@@ -49,12 +52,20 @@
 #define DN_GOTFOCUS DN_FIRST+4 /* Sent when the dialog item gets input focus */
 #define DN_INITDIALOG DN_FIRST+5 /* Sent before showing the dialog */
 #define DN_KILLFOCUS DN_FIRST+6 /* Sent before a dialog item loses the input focus */
+#define DN_TIMER DN_FIRST+7 /* Sent when a timer expires */
 
 #define DN_KEYDOWN DM_KEYDOWN
 #define DN_KEYUP DM_KEYUP
 #define DN_CLOSE DM_CLOSE /* Sent before the dialog is closed */
 
 #define DM_USER 0x4000 /* Starting value for user defined messages */
+
+/* Set/Get Property */
+#define TK_STRING  1
+#define TK_FLOAT   2
+#define TK_INT32   3
+#define TK_INT64   4
+#define TK_BOOL    5
 
 // MessageBox: To indicate the buttons displayed in the message box,
 // specify one of the following values.
@@ -87,6 +98,10 @@
 #define ID_NO     7
 #define ID_CLOSE  8
 #define ID_HELP   9
+// DialogBoxParam: Flags
+#define DB_LFM      0    // Data contains a form in the LFM format
+#define DB_LRS      1    // Data contains a form in the LRS format
+#define DB_FILENAME 2    // Data contains a form file name (*.lfm)
 
 /* other */
 #define EXT_MAX_PATH  16384 /* 16 Kb */
@@ -96,24 +111,37 @@ typedef intptr_t (DCPCALL *tDlgProc)(uintptr_t pDlg, char* DlgItemName, intptr_t
 /* Definition of callback functions called by the DLL */
 typedef BOOL (DCPCALL *tInputBoxProc)(char* Caption, char* Prompt, BOOL MaskInput, char* Value, int ValueMaxLen);
 typedef int (DCPCALL *tMessageBoxProc)(char* Text, char* Caption, long Flags);
+typedef int (DCPCALL *tMsgChoiceBoxProc)(char* Text, char* Caption, char** Buttons, int BtnDef, int BtnEsc);
 typedef BOOL (DCPCALL *tDialogBoxLFMProc)(intptr_t LFMData, unsigned long DataSize, tDlgProc DlgProc);
 typedef BOOL (DCPCALL *tDialogBoxLRSProc)(intptr_t LRSData, unsigned long DataSize, tDlgProc DlgProc);
 typedef BOOL (DCPCALL *tDialogBoxLFMFileProc)(char* LFMFileName, tDlgProc DlgProc);
-
+typedef uintptr_t (DCPCALL *tDialogBoxParamProc)(void* Data, uint32_t DataSize, tDlgProc DlgProc, uint32_t Flags, void *UserData, void* Reserved);
+typedef int (DCPCALL *tTranslateStringProc)(void *Translation, const char *Identifier, const char *Original, char *Output, int OutLen);
+typedef intptr_t (DCPCALL *tSetProperty)(uintptr_t pDlg, const char* DlgItemName, const char *PropName, void *PropValue, int PropType);
+typedef intptr_t (DCPCALL *tGetProperty)(uintptr_t pDlg, const char* DlgItemName, const char *PropName, void *PropValue, int PropType, int PropSize);
+typedef uintptr_t (DCPCALL *tCreateComponent)(uintptr_t pDlg, const char* Parent, const char* DlgItemName, const char* DlgItemClass, void* Reserved);
 
 #pragma pack(push)
 #pragma pack(1)
 typedef struct {
-uint32_t StructSize;
-char PluginDir[EXT_MAX_PATH];
-char PluginConfDir[EXT_MAX_PATH];
-tInputBoxProc InputBox;
-tMessageBoxProc MessageBox;
-tDialogBoxLFMProc DialogBoxLFM;
-tDialogBoxLRSProc DialogBoxLRS;
-tDialogBoxLFMFileProc DialogBoxLFMFile;
-tDlgProc SendDlgMsg;
-unsigned char Reserved[4096 * sizeof(void *)];
+  uint32_t StructSize;
+  char PluginDir[EXT_MAX_PATH];
+  char PluginConfDir[EXT_MAX_PATH];
+  tInputBoxProc InputBox;
+  tMessageBoxProc MessageBox;
+  tDialogBoxLFMProc DialogBoxLFM;
+  tDialogBoxLRSProc DialogBoxLRS;
+  tDialogBoxLFMFileProc DialogBoxLFMFile;
+  tDlgProc SendDlgMsg;
+  void *Translation;
+  tTranslateStringProc TranslateString;
+  uintptr_t VersionAPI;
+  tMsgChoiceBoxProc MsgChoiceBox;
+  tDialogBoxParamProc DialogBoxParam;
+  tSetProperty SetProperty;
+  tGetProperty GetProperty;
+  tCreateComponent CreateComponent;
+  unsigned char Reserved[4088 * sizeof(void *)];
 } tExtensionStartupInfo;
 #pragma pack(pop)
 

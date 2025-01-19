@@ -142,7 +142,7 @@ begin
   bCurrentlyFilling := True;
   ParseLineToList(rsToolTipModeList, cbTooltipShowingMode.Items);
   ParseLineToList(rsToolTipHideTimeOutList, cbToolTipHideTimeOut.Items);
-  OpenTooltipFileTypeDialog.Filter := ParseLineToFileFilter([rsFilterDCToolTipFiles, '*.tooltip', rsFilterAnyFiles, '*.*']);
+  OpenTooltipFileTypeDialog.Filter := ParseLineToFileFilter([rsFilterDCToolTipFiles, '*.tooltip', rsFilterAnyFiles, AllFilesMask]);
   SaveTooltipFileTypeDialog.Filter := OpenTooltipFileTypeDialog.Filter;
 end;
 
@@ -168,7 +168,7 @@ begin
     if lsbCustomFields.ItemIndex < FFileInfoToolTipTemp.HintItemList.Count then
       iLastDisplayedIndex := lsbCustomFields.ItemIndex;
 
-  FreeThenNil(FFileInfoToolTipTemp);
+  FreeAndNil(FFileInfoToolTipTemp);
 end;
 
 { TfrmOptionsToolTips.Save }

@@ -32,6 +32,8 @@ type
     procedure PathLabelMouseWheelUp(Sender: TObject;Shift: TShiftState; MousePos: TPoint;var Handled:Boolean);
     procedure PathLabelMouseWheelDown(Sender: TObject;Shift: TShiftState; MousePos: TPoint;var Handled:Boolean);
 
+    procedure HeaderShowHint(Sender: TObject; HintInfo: PHintInfo);
+
     procedure EachViewUpdateHeader(AFileView: TFileView; {%H-}UserData: Pointer);
 
   protected
@@ -42,10 +44,13 @@ type
 
     procedure UpdateAddressLabel;
     procedure UpdatePathLabel;
+    procedure UpdateColor;
     procedure UpdateFont;
 
     procedure ShowPathEdit;
     procedure SetActive(bActive: Boolean);
+
+    property PathLabel: TPathLabel read FPathLabel;
   end;
 
   { TFileViewFixedHeader }
@@ -86,7 +91,7 @@ implementation
 uses
   LCLType, ShellCtrls, Graphics, uDCUtils, DCOSUtils, DCStrUtils, uKeyboard,
   fMain, uFileSourceUtil, uGlobs, uPixMapManager, uLng, uFileFunctions,
-  uArchiveFileSource, uFileViewWithPanels;
+  uArchiveFileSource, uFileViewWithPanels, uVfsModule;
 
 const
   SortingImageIndex: array[TSortDirection] of Integer = (-1, 0, 1);
@@ -155,8 +160,13 @@ end;
 procedure TFileViewHeader.PathLabelDblClick(Sender: TObject);
 begin
   tmViewHistoryMenu.Enabled:=FALSE; //Cancel the possibility of a left click
-  FFileView.SetFocus;
-  frmMain.Commands.cm_DirHotList(['position=cursor']);
+
+  if gDblClickEditPath then
+    ShowPathEdit
+  else begin
+    FFileView.SetFocus;
+    frmMain.Commands.cm_DirHotList(['position=cursor']);
+  end;
 end;
 
 procedure TFileViewHeader.PathLabelMouseUp(Sender: TObject; Button: TMouseButton;
@@ -210,10 +220,13 @@ end;
 
 procedure TFileViewHeader.PathLabelSetColor(APathLabel: TPathLabel);
 begin
-  APathLabel.ActiveColor:= gPathActiveColor;
-  APathLabel.ActiveFontColor:= gPathActiveFontColor;
-  APathLabel.InactiveColor:= gPathInactiveColor;
-  APathLabel.InactiveFontColor:= gPathInactiveFontColor;
+  with gColors.Path^ do
+  begin
+    APathLabel.ActiveColor:= ActiveColor;
+    APathLabel.ActiveFontColor:= ActiveFontColor;
+    APathLabel.InactiveColor:= InactiveColor;
+    APathLabel.InactiveFontColor:= InactiveFontColor;
+  end;
 end;
 
 procedure TFileViewHeader.onKeyESCAPE(Sender: TObject);
@@ -225,20 +238,23 @@ end;
 procedure TFileViewHeader.onKeyRETURN(Sender: TObject);
 var
   NewPath: String;
+  AClass: TFileSourceClass;
 begin
-  NewPath:= NormalizePathDelimiters(FPathEdit.Text);
-  NewPath:= ReplaceEnvVars(ReplaceTilde(NewPath));
-  if not mbFileExists(NewPath) then
-    begin
-      if not ChooseFileSource(FFileView, NewPath, True) then
-        Exit;
-    end
-  else
-    begin
-      if not ChooseFileSource(FFileView, ExtractFileDir(NewPath)) then
-        Exit;
-      FFileView.SetActiveFile(ExtractFileName(NewPath));
-    end;
+  NewPath:= ReplaceEnvVars(ReplaceTilde(FPathEdit.Text));
+  NewPath:= mbExpandFileName(Trim(NewPath));
+  AClass:= gVfsModuleList.GetFileSource(NewPath);
+
+  // Check file name on the local file system only
+  if not ((AClass = nil) and mbFileExists(NewPath)) then
+  begin
+    if not ChooseFileSource(FFileView, NewPath, True) then
+      Exit;
+  end
+  else begin
+    if not ChooseFileSource(FFileView, ExtractFileDir(NewPath)) then
+      Exit;
+    FFileView.SetActiveFile(ExtractFileName(NewPath));
+  end;
   FPathEdit.Visible := False;
   FFileView.SetFocus;
 end;
@@ -262,8 +278,7 @@ begin
   FPathLabel := TPathLabel.Create(Self, True);
   FPathLabel.Parent := Self;
 
-  PathLabelSetColor(FPathLabel);
-  PathLabelSetColor(FAddressLabel);
+  UpdateColor;
 
   // Display path below address.
   // For correct alignment, first put path at the top, then address at the top.
@@ -274,25 +289,28 @@ begin
   FPathEdit.Parent:= Self;
   FPathEdit.Visible:= False;
   FPathEdit.TabStop:= False;
+  FPathEdit.BorderStyle:= bsNone;
   FPathEdit.ObjectTypes:= [otFolders, otHidden];
 
   OnResize:= @HeaderResize;
+  OnShowHint:=@HeaderShowHint;
 
   FPathEdit.OnExit:= @PathEditExit;
   FPathEdit.onKeyESCAPE:=@onKeyESCAPE;
   FPathEdit.onKeyRETURN:=@onKeyRETURN;
+  FPathEdit.OnShowHint:=@HeaderShowHint;
 
   FPathLabel.OnClick := @PathLabelClick;
   FPathLabel.OnDblClick := @PathLabelDblClick;
   FPathLabel.OnMouseUp := @PathLabelMouseUp;
-
   FPathLabel.OnMouseWheelDown := @PathLabelMouseWheelDown;
   FPathLabel.OnMouseWheelUp := @PathLabelMouseWheelUp;
-
+  FPathLabel.OnShowHint:=@HeaderShowHint;
 
   FAddressLabel.OnClick := @AddressLabelClick;
   FAddressLabel.OnMouseEnter:= @AddressLabelMouseEnter;
-  
+  FAddressLabel.OnShowHint:=@HeaderShowHint;
+
   tmViewHistoryMenu := TTimer.Create(Self); //Timer used to show history after a while in case it was not a double click to show Hot dir
   tmViewHistoryMenu.Enabled  := False;
   tmViewHistoryMenu.Interval := 250;
@@ -305,6 +323,20 @@ procedure TFileViewHeader.HeaderResize(Sender: TObject);
 begin
   UpdateAddressLabel;
   UpdatePathLabel;
+end;
+
+// 1. in most cases, as not to bother users,
+//    the Header does not need to show hint,
+// 2. so set hint to the full path, only when the path in PathLabel is shortened
+//    due to insufficient width
+procedure TFileViewHeader.HeaderShowHint(Sender: TObject; HintInfo: PHintInfo);
+begin
+  HintInfo^.HintStr := '';
+  if FFileView.CurrentAddress<>'' then
+    exit;
+
+  if IncludeTrailingPathDelimiter(FPathLabel.Caption) <> FFileView.CurrentPath then
+    HintInfo^.HintStr := FFileView.CurrentPath;
 end;
 
 procedure TFileViewHeader.UpdateAddressLabel;
@@ -324,6 +356,12 @@ end;
 procedure TFileViewHeader.UpdatePathLabel;
 begin
   FPathLabel.Caption := MinimizeFilePath(FFileView.CurrentPath, FPathLabel.Canvas, FPathLabel.Width);
+end;
+
+procedure TFileViewHeader.UpdateColor;
+begin
+  PathLabelSetColor(FPathLabel);
+  PathLabelSetColor(FAddressLabel);
 end;
 
 procedure TFileViewHeader.UpdateFont;

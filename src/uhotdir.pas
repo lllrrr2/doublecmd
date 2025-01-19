@@ -166,7 +166,7 @@ uses
 
 function GetCaption(const ACaption: TCaption): TCaption;
 begin
-{$IFNDEF LCLWIN32}
+{$IF not (DEFINED(LCLWIN32) or DEFINED(LCLCOCOA))}
   if (Pos('&', StringReplace(ACaption, '&&', '', [rfReplaceAll])) = 0) then
     Result:= '&' + ACaption
   else
@@ -1081,7 +1081,7 @@ begin
   Index := 1;
   CurrentMenuLevel := 0;
 
-  ConfigFile := TIniFileEx.Create(mbExpandFilename(TotalCommanderConfigFilename));
+  ConfigFile := TIniFileEx.Create(GetActualTCIni(mbExpandFilename(TotalCommanderConfigFilename), CONFIGFILE_SECTIONNAME));
 
   try
     repeat
@@ -1174,14 +1174,12 @@ var
   ConfigFile: TIniFileEx;
   Index, OffsetForOnesAlreadyThere: integer;
   sName: string;
-  RememberCursor: TCursor;
 begin
   Result := True;
   OffsetForOnesAlreadyThere := 0;
 
   try
-    RememberCursor := Screen.Cursor;
-    Screen.Cursor := crHourGlass;
+    Screen.BeginWaitCursor;
     try
       ConfigFile := TIniFileEx.Create(mbExpandFileName(TotalCommanderConfigFilename));
       try
@@ -1250,7 +1248,7 @@ begin
     end;
 
   finally
-    Screen.Cursor := RememberCursor;
+    Screen.EndWaitCursor;
   end;
 end;
 {$ENDIF}

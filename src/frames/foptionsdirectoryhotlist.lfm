@@ -3,6 +3,7 @@ inherited frmOptionsDirectoryHotlist: TfrmOptionsDirectoryHotlist
   Width = 730
   ClientHeight = 658
   ClientWidth = 730
+  HelpKeyword = '/directoryhotlist.html'
   Constraints.MinHeight = 520
   Constraints.MinWidth = 600
   ParentShowHint = False
@@ -21,10 +22,8 @@ inherited frmOptionsDirectoryHotlist: TfrmOptionsDirectoryHotlist
     ChildSizing.TopBottomSpacing = 6
     ClientHeight = 626
     ClientWidth = 714
-    Color = clForm
     Constraints.MinHeight = 460
     Constraints.MinWidth = 548
-    ParentColor = False
     TabOrder = 0
     object pnlClient: TPanel
       AnchorSideLeft.Control = gbDirectoryHotlist
@@ -84,8 +83,6 @@ inherited frmOptionsDirectoryHotlist: TfrmOptionsDirectoryHotlist
         BevelOuter = bvNone
         ClientHeight = 161
         ClientWidth = 314
-        Color = clForm
-        ParentColor = False
         TabOrder = 1
         OnResize = pnlButtonsResize
         object btnInsert: TBitBtn
@@ -170,7 +167,7 @@ inherited frmOptionsDirectoryHotlist: TfrmOptionsDirectoryHotlist
           Tag = 7
           AnchorSideTop.Control = btnSort
           AnchorSideTop.Side = asrBottom
-          AnchorSideRight.Control = btnHelp
+          AnchorSideRight.Control = btnBackup
           Left = 8
           Height = 25
           Top = 124
@@ -213,20 +210,6 @@ inherited frmOptionsDirectoryHotlist: TfrmOptionsDirectoryHotlist
           Caption = '&Sort...'
           OnClick = btnActionClick
           TabOrder = 3
-        end
-        object btnHelp: TBitBtn
-          AnchorSideTop.Control = btnMiscellaneous
-          AnchorSideTop.Side = asrCenter
-          AnchorSideRight.Control = pnlButtons
-          AnchorSideRight.Side = asrBottom
-          Left = 164
-          Height = 25
-          Top = 124
-          Width = 150
-          Anchors = [akTop, akRight]
-          Caption = '&Help'
-          OnClick = btnHelpClick
-          TabOrder = 8
         end
       end
       object rgWhereToAdd: TRadioGroup

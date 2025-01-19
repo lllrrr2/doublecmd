@@ -17,7 +17,6 @@ uses
   uFileSorting,
   DCXmlConfig,
   DCBasicTypes,
-  DCClassesUtf8,
   uTypes,
   uFileViewWithGrid;
 
@@ -36,6 +35,8 @@ type
     FLastMouseScrollTime: QWord;
     ColumnsView: TColumnsFileView;
 
+    FOnDrawCell: TFileViewOnDrawCell;
+
     function GetGridHorzLine: Boolean;
     function GetGridVertLine: Boolean;
     procedure SetGridHorzLine(const AValue: Boolean);
@@ -44,9 +45,6 @@ type
   protected
     procedure DragCanceled; override;
     procedure DoMouseMoveScroll(X, Y: Integer);
-    {$IF lcl_fullversion < 1080003}
-    function SelectCell(aCol, aRow: Integer): Boolean; override;
-    {$ENDIF}
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X,Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
@@ -62,10 +60,8 @@ type
     procedure DrawCell(aCol, aRow: Integer; aRect: TRect;
               aState: TGridDrawState); override;
 
-    {$if lcl_fullversion >= 1070000}
     procedure DoAutoAdjustLayout(const AMode: TLayoutAdjustmentPolicy;
                 const AXProportion, AYProportion: Double); override;
-    {$endif}
   public
     ColumnsOwnDim: TFunctionDime;
 
@@ -91,6 +87,7 @@ type
     property GridVertLine: Boolean read GetGridVertLine write SetGridVertLine;
     property GridHorzLine: Boolean read GetGridHorzLine write SetGridHorzLine;
 
+    property OnDrawCell: TFileViewOnDrawCell read FOnDrawCell write FOnDrawCell;
   end;
 
   TColumnResized = procedure (Sender: TObject; ColumnIndex: Integer; ColumnNewsize: integer) of object;
@@ -109,6 +106,9 @@ type
     dgPanel: TDrawGridEx;
     FOnColumnResized: TColumnResized;
 
+    function GetOnDrawCell: TFileViewOnDrawCell;
+    procedure SetOnDrawCell( OnDrawCell: TFileViewOnDrawCell );
+
     function GetColumnsClass: TPanelColumnsClass;
 
     procedure SetRowCount(Count: Integer);
@@ -117,6 +117,8 @@ type
 
     procedure MakeVisible(iRow: Integer);
     procedure MakeActiveVisible;
+
+    procedure UpdateFooterDetails(AInfo: Boolean);
 
     {en
        Format and cache all columns strings.
@@ -137,9 +139,7 @@ type
 
     // -- Events --------------------------------------------------------------
 
-{$IF lcl_fullversion >= 093100}
     procedure dgPanelBeforeSelection(Sender: TObject; aCol, aRow: Integer);
-{$ENDIF}
     procedure dgPanelHeaderClick(Sender: TObject;IsColumn: Boolean; index: Integer);
     procedure dgPanelMouseWheelUp(Sender: TObject; Shift: TShiftState;
                                   MousePos: TPoint; var Handled: Boolean);
@@ -150,6 +150,7 @@ type
     procedure dgPanelResize(Sender: TObject);
     procedure dgPanelHeaderSized(Sender: TObject; IsColumn: Boolean; index: Integer);
     procedure ColumnsMenuClick(Sender: TObject);
+    procedure CopyFileDetails(AList: TStringList);
 
   protected
     procedure CreateDefault(AOwner: TWinControl); override;
@@ -174,6 +175,7 @@ type
     procedure SetSorting(const NewSortings: TFileSortings); override;
     procedure ShowRenameFileEdit(var aFile: TFile); override;
     procedure UpdateRenameFileEditPosition; override;
+    procedure UpdateInfoPanel; override;
 
     procedure MouseScrollTimer(Sender: TObject); override;
 
@@ -185,6 +187,7 @@ type
     ActiveColm: String;
     ActiveColmSlave: TPanelColumnsClass;
     isSlave:boolean;
+    Demo: Boolean;
 //---------------------
 
     constructor Create(AOwner: TWinControl; AFileSource: IFileSource; APath: String; AFlags: TFileViewFlags = []); override;
@@ -202,26 +205,28 @@ type
     procedure LoadConfiguration(AConfig: TXmlConfig; ANode: TXmlNode); override;
     procedure SaveConfiguration(AConfig: TXmlConfig; ANode: TXmlNode; ASaveHistory:boolean); override;
 
+    procedure UpdateColor; override;
+
     procedure UpdateColumnsView;
     procedure SetColumnSet(const AName: String);
     procedure SetGridFunctionDim(ExternalDimFunction:TFunctionDime);
 
     property OnColumnResized: TColumnResized read FOnColumnResized write FOnColumnResized;
+    property OnDrawCell: TFileViewOnDrawCell read GetOnDrawCell write SetOnDrawCell;
   published
+    procedure cm_SaveFileDetailsToFile(const Params: array of string);
     procedure cm_CopyFileDetailsToClip(const Params: array of string);
-
   end;
 
 implementation
 
 uses
   LCLProc, Buttons, Clipbrd, DCStrUtils, uLng, uGlobs, uPixmapManager, uDebug,
-  uDCUtils, math, fMain, fOptions, uClipboard,
-  uOrderedFileView,
+  DCClassesUtf8, dmCommonData, uDCUtils, math, fMain, fOptions, uClipboard,
+  uOrderedFileView, uShowMsg,
   uFileSourceProperty,
   uKeyboard,
   uFileFunctions,
-  uFormCommands,
   uFileViewNotebook,
   fOptionsCustomColumns;
 
@@ -306,6 +311,12 @@ begin
     if (FileSystem = EmptyStr) or (FileSystem = FS_GENERAL) then
       AConfig.SetValue(ANode, 'ColumnsSet', ActiveColm);
   end;
+end;
+
+procedure TColumnsFileView.UpdateColor;
+begin
+  inherited UpdateColor;
+  dgPanel.GridLineColor:= gColors.FilePanel^.GridLine;
 end;
 
 procedure TColumnsFileView.dgPanelHeaderClick(Sender: TObject;
@@ -425,10 +436,11 @@ end;
 
 procedure TColumnsFileView.dgPanelSelection(Sender: TObject; aCol, aRow: Integer);
 begin
-{$IF lcl_fullversion >= 093100}
   dgPanel.Options := dgPanel.Options - [goDontScrollPartCell];
-{$ENDIF}
+
   DoFileIndexChanged(aRow - dgPanel.FixedRows, dgPanel.TopRow);
+
+  if (FSelectedCount = 0) then UpdateFooterDetails(False);
 end;
 
 procedure TColumnsFileView.dgPanelTopLeftChanged(Sender: TObject);
@@ -504,7 +516,13 @@ begin
   if gInplaceRenameButton and (ARect.Right + edtRename.ButtonWidth < dgPanel.ClientWidth) then
     Inc(ARect.Right, edtRename.ButtonWidth);
 
-  edtRename.SetBounds(ARect.Left, ARect.Top, ARect.Right - ARect.Left, ARect.Bottom - ARect.Top);
+  edtRename.SetBounds(ARect.Left, ARect.Top, ARect.Width, ARect.Height);
+end;
+
+procedure TColumnsFileView.UpdateInfoPanel;
+begin
+  inherited UpdateInfoPanel;
+  UpdateFooterDetails(True);
 end;
 
 procedure TColumnsFileView.MouseScrollTimer(Sender: TObject);
@@ -602,6 +620,9 @@ begin
              fpAttributes,        // For distinguishing directories
              fpLink,              // For distinguishing directories (link to dir) and link icons
              fpModificationTime   // For selecting/coloring files (by SearchTemplate)
+             {$IFDEF DARWIN}
+             ,fpMacOSFinderTag    // macOS finder tag
+             {$ENDIF}
             ];
 
   ColumnsClass := GetColumnsClass;
@@ -638,7 +659,7 @@ begin
   FileIndex:= FileIndex + dgPanel.FixedRows;
   Result := dgPanel.CellRect(0, FileIndex);
 
-  Result.Top:= Result.Top + (dgPanel.RowHeights[FileIndex] - gIconsSize) div 2;
+  Result.Top:= Result.Top + (Result.Height - gIconsSize) div 2;
   Result.Left:= Result.Left + CELL_PADDING;
   Result.Right:= Result.Left + gIconsSize;
   Result.Bottom:= Result.Bottom + gIconsSize;
@@ -647,7 +668,17 @@ end;
 procedure TColumnsFileView.SetRowCount(Count: Integer);
 begin
   FUpdatingActiveFile := True;
+  // Remove a fake bottom padding for last row
+  if dgPanel.RowCount > dgPanel.FixedRows then
+  begin
+    dgPanel.RowHeights[dgPanel.RowCount - 1] := dgPanel.DefaultRowHeight;
+  end;
   dgPanel.RowCount := dgPanel.FixedRows + Count;
+  // Add a fake bottom padding for last row
+  if Count > 0 then
+  begin
+    dgPanel.RowHeights[dgPanel.RowCount - 1] := dgPanel.DefaultRowHeight + CELL_PADDING;
+  end;
   FUpdatingActiveFile := False;
 end;
 
@@ -724,6 +755,48 @@ begin
     MakeVisible(dgPanel.Row);
 end;
 
+procedure TColumnsFileView.UpdateFooterDetails(AInfo: Boolean);
+var
+  AFile: TFile;
+  AText: String;
+begin
+  if gColumnsLongInStatus and (FSelectedCount = 0) and (not FlatView) then
+  begin
+    AFile:= CloneActiveFile;
+    if Assigned(AFile) then
+      try
+        if AFile.IsNameValid then begin
+          if gDirBrackets and AFile.IsLinkToDirectory then
+            begin
+              AText := gFolderPrefix + AFile.Name + gFolderPostfix;
+              if Assigned(AFile.LinkProperty) then begin
+                AText += ' -> ' + gFolderPrefix + AFile.LinkProperty.LinkTo + gFolderPostfix;
+              end;
+            end
+            else if AFile.IsLink then
+            begin
+              AText := AFile.Name;
+              if Assigned(AFile.LinkProperty) then begin
+                AText += ' -> ' + AFile.LinkProperty.LinkTo;
+              end;
+            end
+            else if gDirBrackets and AFile.IsDirectory then
+              AText := gFolderPrefix + AFile.Name + gFolderPostfix
+            else begin
+              AText := AFile.Name;
+            end;
+            lblInfo.Caption := AText;
+        end                       
+        else 
+         if not AInfo then begin
+            inherited UpdateInfoPanel;
+         end;
+      finally
+        AFile.Free;
+      end;
+  end;
+end;
+
 procedure TColumnsFileView.SetActiveFile(FileIndex: PtrInt; ScrollTo: Boolean; aLastTopRowIndex: PtrInt = -1);
 begin
   if not ScrollTo then
@@ -735,13 +808,11 @@ begin
   end;
 end;
 
-{$IF lcl_fullversion >= 093100}
 procedure TColumnsFileView.dgPanelBeforeSelection(Sender: TObject; aCol, aRow: Integer);
 begin
   if dgPanel.IsRowVisible(aRow) then
     dgPanel.Options := dgPanel.Options + [goDontScrollPartCell];
 end;
-{$ENDIF}
 
 procedure TColumnsFileView.RedrawFile(DisplayFile: TDisplayFile);
 begin
@@ -860,9 +931,7 @@ begin
   dgPanel.OnMouseWheelUp := @dgPanelMouseWheelUp;
   dgPanel.OnMouseWheelDown := @dgPanelMouseWheelDown;
   dgPanel.OnSelection:= @dgPanelSelection;
-{$IF lcl_fullversion >= 093100}
   dgPanel.OnBeforeSelection:= @dgPanelBeforeSelection;
-{$ENDIF}
   dgPanel.OnTopLeftChanged:= @dgPanelTopLeftChanged;
   dgpanel.OnResize:= @dgPanelResize;
   dgPanel.OnHeaderSized:= @dgPanelHeaderSized;
@@ -896,6 +965,7 @@ begin
     with TColumnsFileView(FileView) do
     begin
       FColumnsSortDirections := Self.FColumnsSortDirections;
+      OnDrawCell := Self.OnDrawCell;
 
       ActiveColm := Self.ActiveColm;
       ActiveColmSlave := nil;
@@ -949,10 +1019,13 @@ var
 begin
   ScrollTo := IsActiveFileVisible;
 
-  // Update grid row count.
-  SetRowCount(FFiles.Count);
+  // Row count updates and Content updates should be grouped in one transaction
+  // otherwise, Grids may have subtle synchronization issues.
+  dgPanel.BeginUpdate;
+  SetRowCount(FFiles.Count);  // Update grid row count.
   SetFilesDisplayItems;
   RedrawFiles;
+  dgPanel.EndUpdate;
 
   if SetActiveFileNow(RequestedActiveFile, True, FLastTopRowIndex) then
     RequestedActiveFile := ''
@@ -1039,7 +1112,9 @@ end;
 
 function TColumnsFileView.GetActiveFileIndex: PtrInt;
 begin
-  Result := dgPanel.Row - dgPanel.FixedRows;
+  Result:= -1;
+  if dgPanel<>nil then
+    Result := dgPanel.Row - dgPanel.FixedRows;
 end;
 
 function TColumnsFileView.GetVisibleFilesIndexes: TRange;
@@ -1047,6 +1122,16 @@ begin
   Result := dgPanel.GetVisibleRows;
   Dec(Result.First, dgPanel.FixedRows);
   Dec(Result.Last, dgPanel.FixedRows);
+end;
+
+function TColumnsFileView.GetOnDrawCell: TFileViewOnDrawCell;
+begin
+  Result:= dgPanel.OnDrawCell;
+end;
+
+procedure TColumnsFileView.SetOnDrawCell(OnDrawCell: TFileViewOnDrawCell);
+begin
+  dgPanel.OnDrawCell:= OnDrawCell;
 end;
 
 function TColumnsFileView.GetColumnsClass: TPanelColumnsClass;
@@ -1158,10 +1243,9 @@ begin
       end;
 end;
 
-procedure TColumnsFileView.cm_CopyFileDetailsToClip(const Params: array of string);
+procedure TColumnsFileView.CopyFileDetails(AList: TStringList);
 var
   I: Integer;
-  sl: TStringList;
   AFile: TDisplayFile;
   ColumnsClass: TPanelColumnsClass;
 
@@ -1182,33 +1266,77 @@ var
         S:= S + AFile.DisplayStrings[J] + #09;
       end;
       J:= Length(S);
-      if J > 0 then sl.Add(Copy(S, 1, J - 1));
+      if J > 0 then AList.Add(Copy(S, 1, J - 1));
     end;
   end;
 
+begin
+  ColumnsClass:= GetColumnsClass;
+
+  for I:= 0 to FFiles.Count - 1 do
+  begin
+    AFile:= FFiles[I];
+    if AFile.Selected then AddFile;
+  end;
+
+  if AList.Count = 0 then
+  begin
+    AFile:= GetActiveDisplayFile;
+    AddFile;
+  end;
+end;
+
+procedure TColumnsFileView.cm_CopyFileDetailsToClip(const Params: array of string);
+var
+  sl: TStringList;
 begin
   if DisplayFiles.Count > 0 then
   begin
     sl:= TStringList.Create;
     try
-      ColumnsClass:= GetColumnsClass;
-
-      for I:= 0 to FFiles.Count - 1 do
-      begin
-        AFile:= FFiles[I];
-        if AFile.Selected then AddFile;
-      end;
-
-      if sl.Count = 0 then
-      begin
-        AFile:= GetActiveDisplayFile;
-        AddFile;
-      end;
+      CopyFileDetails(sl);
 
       Clipboard.Clear;   // prevent multiple formats in Clipboard
       ClipboardSetText(TrimRightLineEnding(sl.Text, sl.TextLineBreakStyle));
     finally
       FreeAndNil(sl);
+    end;
+  end;
+end;
+
+procedure TColumnsFileView.cm_SaveFileDetailsToFile(const Params: array of string);
+var
+  AFileName: String;
+  sl: TStringListEx;
+begin
+  if DisplayFiles.Count > 0 then
+  begin
+    if Length(Params) > 0 then
+      AFileName:= Params[0]
+    else begin
+      with dmComData do
+      begin
+        SaveDialog.DefaultExt := '.txt';
+        SaveDialog.Filter     := '*.txt|*.txt';
+        SaveDialog.FileName   := EmptyStr;
+
+        if not SaveDialog.Execute then Exit;
+        AFileName:= SaveDialog.FileName;
+      end;
+    end;
+
+    if (AFileName <> EmptyStr) then
+    try
+      sl:= TStringListEx.Create;
+      try
+        CopyFileDetails(sl);
+        sl.SaveToFile(AFileName);
+      finally
+        FreeAndNil(sl);
+      end;
+    except
+      on E: Exception do
+        msgError(rsMsgErrSaveFile + '-' + E.Message);
     end;
   end;
 end;
@@ -1373,6 +1501,7 @@ procedure TDrawGridEx.DrawColumnText(aCol, aRow: Integer; aRect: TRect;
   aState: TGridDrawState);
 var
   SortingDirection: TSortDirection;
+  TextStyle: TTextStyle;
 begin
   SortingDirection := ColumnsView.FColumnsSortDirections[ACol];
 
@@ -1383,6 +1512,13 @@ begin
         Canvas,
         aRect.Left, aRect.Top + (RowHeights[aRow] - gIconsSize) div 2);
     aRect.Left += gIconsSize;
+  end;
+
+  if gColumnsTitleLikeValues then
+  begin
+    TextStyle := Canvas.TextStyle;
+    TextStyle.Alignment := ColumnsView.GetColumnsClass.GetColumnAlign(ACol);
+    Canvas.TextStyle := TextStyle;
   end;
 
   DrawCellText(aCol, aRow, aRect, aState, GetColumnTitle(aCol));
@@ -1403,6 +1539,7 @@ var
   AFile: TDisplayFile;
   FileSourceDirectAccess: Boolean;
   ColumnsSet: TPanelColumnsClass;
+  params: TFileSourceUIParams;
 
   //------------------------------------------------------
   // begin subprocedures
@@ -1427,8 +1564,8 @@ var
   procedure DrawIconCell;
   //------------------------------------------------------
   var
-    Y: Integer;
     IconID: PtrInt;
+    targetWidth: Integer;
   begin
     if (gShowIcons <> sim_none) then
     begin
@@ -1438,20 +1575,23 @@ var
         IconID := PixMapManager.GetDefaultIcon(AFile.FSFile);
 
       // center icon vertically
-      Y:= aRect.Top + (RowHeights[ARow] - gIconsSize) div 2;
+      params.iconRect.Left:= aRect.Left + CELL_PADDING;
+      params.iconRect.Top:= aRect.Top + (aRect.Height - gIconsSize) div 2;
+      params.iconRect.Width:= gIconsSize;
+      params.iconRect.Height:= gIconsSize;
 
-      if gShowHiddenDimmed and AFile.FSFile.IsHidden then
+      if gShowHiddenDimmed and ColumnsView.FileSource.isHiddenFile(AFile.FSFile) then
         PixMapManager.DrawBitmapAlpha(IconID,
                                       Canvas,
-                                      aRect.Left + CELL_PADDING,
-                                      Y
+                                      params.iconRect.Left,
+                                      params.iconRect.Top
                                      )
       else
         // Draw icon for a file
         PixMapManager.DrawBitmap(IconID,
                                  Canvas,
-                                 aRect.Left + CELL_PADDING,
-                                 Y
+                                 params.iconRect.Left,
+                                 params.iconRect.Top
                                 );
 
       // Draw overlay icon for a file if needed
@@ -1460,8 +1600,8 @@ var
         PixMapManager.DrawBitmapOverlay(AFile,
                                         FileSourceDirectAccess,
                                         Canvas,
-                                        aRect.Left + CELL_PADDING,
-                                        Y
+                                        params.iconRect.Left,
+                                        params.iconRect.Top
                                         );
       end;
 
@@ -1471,9 +1611,9 @@ var
 
     if gCutTextToColWidth then
     begin
-      Y:= (aRect.Right - aRect.Left) - 2*CELL_PADDING;
-      if (gShowIcons <> sim_none) then Y:= Y - gIconsSize - 2;
-      s:= FitFileName(s, Canvas, AFile.FSFile, Y);
+      targetWidth:= (aRect.Width) - 2*CELL_PADDING;
+      if (gShowIcons <> sim_none) then targetWidth:= targetWidth - gIconsSize - 2;
+      s:= FitFileName(s, Canvas, AFile.FSFile, targetWidth);
     end;
 
     if (gShowIcons <> sim_none) then
@@ -1486,19 +1626,22 @@ var
   procedure DrawOtherCell;
   //------------------------------------------------------
   var
-    tw: Integer;
+    tw, vTextLeft: Integer;
   begin
     s := AFile.DisplayStrings.Strings[ACol];
 
     if gCutTextToColWidth then
-      s := FitOtherCellText(s, Canvas, ARect.Right - ARect.Left - 2*CELL_PADDING);
+      s := FitOtherCellText(s, Canvas, ARect.Width - 2*CELL_PADDING);
 
     case ColumnsSet.GetColumnAlign(ACol) of
 
       taRightJustify:
         begin
           tw := Canvas.TextWidth(s);
-          Canvas.TextOut(aRect.Right - tw - CELL_PADDING, iTextTop, s);
+          vTextLeft := aRect.Right - tw - CELL_PADDING;
+          if aCol = ColCount - 1 then
+            Dec(vTextLeft, CELL_PADDING);
+          Canvas.TextOut(vTextLeft, iTextTop, s);
         end;
 
       taLeftJustify:
@@ -1625,15 +1768,12 @@ var
         delta:=(Canvas.Pen.Width shr 1)+1;
     end;
 
-
     if ColumnsSet.UseFrameCursor and (gdSelected in aState) and (ColumnsView.Active OR ColumnsSet.GetColumnUseInactiveSelColor(Acol)) then
     begin
       if ColumnsView.Active then
         Canvas.Pen.Color := ColumnsSet.GetColumnCursorColor(ACol)
       else
         Canvas.Pen.Color := ColumnsSet.GetColumnInactiveCursorColor(ACol);
-
-
 
       if ACol=0 then
       begin
@@ -1653,13 +1793,6 @@ var
 
         Canvas.Line(aRect.Right - delta - 1, aRect.Top + delta , aRect.Right - delta - 1, aRect.Bottom - delta - 1);
       end;
-
-
-      {
-      Canvas.Pen.Color:=clred;
-      Canvas.Brush.Style:=bsClear;
-//      Canvas.Rectangle(Rect(aRect.Left + delta , aRect.Top + delta , aRect.Right - delta,aRect.Bottom - delta));
-      }
     end;
 
     // Draw drop selection.
@@ -1687,23 +1820,6 @@ var
       Canvas.Line(aRect.Right - delta - 1, aRect.Top + delta , aRect.Right - delta - 1, aRect.Bottom - delta - 1);
     end;
 
-      {
-//      Canvas.Rectangle(aRect);
-      Canvas.Line(aRect.Left, aRect.Top + delta , aRect.Right - delta, aRect.Top + delta );
-      Canvas.Line(aRect.Left, aRect.Bottom - 1 - delta, aRect.Right - delta, aRect.Bottom - 1 - delta);
-
-      if ACol=0 then
-         Canvas.Line(aRect.Left + delta, aRect.Top + delta , aRect.Left + delta, aRect.Bottom - delta - 1);
-
-
-      if ACol=ColCount-1 then
-      Canvas.Line(aRect.Right - delta - 1, aRect.Top + delta , aRect.Right - delta - 1, aRect.Bottom - delta - 1);
-        }
-        {
-        Canvas.Pen.Color:=clred;
-        Canvas.Brush.Style:=bsClear;
-        Canvas.Rectangle(Rect(aRect.Left {+ delta} , aRect.Top {+ delta} , aRect.Right - delta,aRect.Bottom - delta));
-        }
     end;
   end;
 
@@ -1723,7 +1839,7 @@ var
       ColAlign: TAlignment;
     begin
       CellText := AFile.DisplayStrings[ACell.Col];
-      CellWidth := Canvas.TextWidth(CellText) + 2*CELL_PADDING;
+      CellWidth := Canvas.TextWidth(CellText) + 3*CELL_PADDING;
       if (ACell.Col = 0) and (gShowIcons <> sim_none) then
         CellWidth := CellWidth + gIconsSize + 2;
 
@@ -1844,6 +1960,25 @@ var
     aCol := CCell.Col;
     aRect := CCell.Rect;
   end;
+
+  procedure callFileSourceDrawCell;
+  var
+    handler: TFileSourceUIHandler;
+  begin
+    handler:= ColumnsView.FileSource.GetUIHandler;
+    if handler = nil then
+      Exit;
+
+    params.drawingRect:= aRect;
+    handler.draw( params );
+  end;
+
+  procedure callOnDrawCell;
+  begin
+    if Assigned(OnDrawCell) and not(CsDesigning in ComponentState) then
+      OnDrawCell(Self.ColumnsView,aCol,aRow,params.drawingRect,params.focused,AFile);
+  end;
+
   //------------------------------------------------------
   //end of subprocedures
   //------------------------------------------------------
@@ -1858,15 +1993,26 @@ begin
   end
   else if ColumnsView.IsFileIndexInRange(ARow - FixedRows) then
   begin
+    // remove fake padding from last row
+    if aRow = RowCount - 1 then
+      Dec(aRect.Bottom, CELL_PADDING);
+
     AFile := ColumnsView.FFiles[ARow - FixedRows]; // substract fixed rows (header)
     FileSourceDirectAccess := fspDirectAccess in ColumnsView.FileSource.Properties;
+
+    params:= Default( TFileSourceUIParams );
+    params.sender:= Self.ColumnsView;
+    params.fs:= Self.ColumnsView.FileSource;
+    params.col:= aCol;
+    params.row:= aRow;
+    params.displayFile:= aFile;
 
     if AFile.DisplayStrings.Count = 0 then
       ColumnsView.MakeColumnsStrings(AFile, ColumnsSet);
 
     PrepareColors;
 
-    iTextTop := aRect.Top + (RowHeights[aRow] - Canvas.TextHeight('Wg')) div 2;
+    iTextTop := aRect.Top + (aRect.Height - Canvas.TextHeight('Wg')) div 2;
 
     if gExtendCellWidth then
       DrawExtendedCells
@@ -1878,8 +2024,21 @@ begin
         DrawOtherCell;
     end;
 
+    params.focused:= (gdSelected in aState) and ColumnsView.Active;
+    callFileSourceDrawCell;
+    callOnDrawCell;
+
     DrawCellGrid(aCol,aRow,aRect,aState);
     DrawLines;
+
+    // brush fake padding for last row
+    if aRow = RowCount - 1 then
+    begin
+      Canvas.Brush.Color := Self.Color;
+      aRect.Top := aRect.Bottom;
+      Inc(aRect.Bottom, CELL_PADDING);
+      Canvas.FillRect(aRect);
+    end;
   end
   else
   begin
@@ -1888,13 +2047,11 @@ begin
   end;
 end;
 
-{$if lcl_fullversion >= 1070000}
 procedure TDrawGridEx.DoAutoAdjustLayout(const AMode: TLayoutAdjustmentPolicy;
   const AXProportion, AYProportion: Double);
 begin
   // Don't auto adjust layout
 end;
-{$endif}
 
 procedure TDrawGridEx.MouseUp(Button: TMouseButton; Shift: TShiftState; X,
   Y: Integer);
@@ -1904,6 +2061,34 @@ var
   MI: TMenuItem;
   FileSystem: String;
   Background: Boolean;
+
+  procedure handleMBLeft;
+  var
+    handler: TFileSourceUIHandler;
+    params: TFileSourceUIParams;
+  begin
+    params:= Default( TFileSourceUIParams );
+    params.sender:= self.ColumnsView;
+    params.fs:= self.ColumnsView.FileSource;
+
+    handler:= params.fs.GetUIHandler;
+    if handler = nil then
+      Exit;
+
+    params.shift:= Shift;
+    params.x:= X;
+    params.y:= Y;
+    MouseToCell( X, Y, params.col, params.row );
+    if NOT self.IsRowIndexValid(params.row) then
+      Exit;
+
+    ColRowToOffset(True, True, params.col, params.drawingRect.Left, params.drawingRect.Right );
+    ColRowToOffset(False, True, params.row, params.drawingRect.Top, params.drawingRect.Bottom );
+
+    params.displayFile:= ColumnsView.FFiles[params.row - FixedRows];
+    handler.click( params );
+  end;
+
 begin
   if ColumnsView.IsLoadingFileList then Exit;
 {$IFDEF LCLGTK2}
@@ -1921,7 +2106,12 @@ begin
 
   ColumnsView.FMainControlMouseDown := False;
 
-  if Button = mbRight then
+  if ColumnsView.Demo then Exit;
+
+  if Button = mbLeft then
+  begin
+    handleMBLeft;
+  end else if Button = mbRight then
     begin
       { If right click on header }
       if (Y >= 0) and (Y < GetHeaderHeight) then
@@ -1951,9 +2141,12 @@ begin
               if not SameText(FileSystem, FS_GENERAL) then
               begin
                 //-
-                MI:=TMenuItem.Create(ColumnsView.pmColumnsMenu);
-                MI.Caption:='-';
-                ColumnsView.pmColumnsMenu.Items.Add(MI);
+                if ColumnsView.pmColumnsMenu.Items.Count > 0 then
+                begin
+                  MI:=TMenuItem.Create(ColumnsView.pmColumnsMenu);
+                  MI.Caption:='-';
+                  ColumnsView.pmColumnsMenu.Items.Add(MI);
+                end;
                 // General columns set
                 for I:= 0 to ColSet.Items.Count - 1 do
                 begin
@@ -1970,9 +2163,13 @@ begin
               end;
             end;
           //-
-          MI:=TMenuItem.Create(ColumnsView.pmColumnsMenu);
-          MI.Caption:='-';
-          ColumnsView.pmColumnsMenu.Items.Add(MI);
+          I:= ColumnsView.pmColumnsMenu.Items.Count - 1;
+          if (I >= 0) and (ColumnsView.pmColumnsMenu.Items[I].Caption <> '-') then
+          begin
+            MI:=TMenuItem.Create(ColumnsView.pmColumnsMenu);
+            MI.Caption:='-';
+            ColumnsView.pmColumnsMenu.Items.Add(MI);
+          end;
           //Configure custom columns
           MI:=TMenuItem.Create(ColumnsView.pmColumnsMenu);
           MI.Tag:=1001;
@@ -2030,6 +2227,11 @@ begin
   AllowOutboundEvents := False;
   inherited MouseDown(Button, Shift, X, Y);
   AllowOutboundEvents := True;
+
+  if not Focused then
+  begin
+    if CanSetFocus then SetFocus;
+  end;
 end;
 
 procedure TDrawGridEx.MouseMove(Shift: TShiftState; X, Y: Integer);
@@ -2088,20 +2290,6 @@ begin
   else
     Options := Options - [goVertLine];
 end;
-
-{$IF lcl_fullversion < 1080003}
-// Workaround for Lazarus issue 31942.
-function TDrawGridEx.SelectCell(aCol, aRow: Integer): Boolean;
-begin
-  Result:= inherited SelectCell(aCol, aRow);
-  // ScrollToCell hangs when Width = 0
-  if Width = 0 then
-  begin
-    Result:= False;
-    SetColRow(aCol, aRow);
-  end;
-end;
-{$ENDIF}
 
 function TDrawGridEx.GetVisibleRows: TRange;
 var

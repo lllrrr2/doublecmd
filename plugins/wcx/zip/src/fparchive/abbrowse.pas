@@ -59,6 +59,7 @@ type
     FFileName : string;
     FLogFile : string;
     FLogging : Boolean;
+    FOpenMode : TAbOpenMode;
     FOnArchiveProgress : TAbArchiveProgressEvent;
     FOnArchiveItemProgress : TAbArchiveItemProgressEvent;
     FOnChange : TNotifyEvent;
@@ -202,6 +203,10 @@ type
       read FForceType
       write FForceType
       default False;
+
+    property OpenMode : TAbOpenMode
+      read FOpenMode
+      write FOpenMode;
 
   public {events}
     property OnChange : TNotifyEvent
@@ -381,6 +386,7 @@ begin
   ResetMeters;
   if Assigned(FArchive) then begin
     {properties}
+    FArchive.OpenMode              := FOpenMode;
     FArchive.SpanningThreshold     := FSpanningThreshold;
     FArchive.LogFile               := FLogFile;
     FArchive.Logging               := FLogging;
@@ -551,7 +557,9 @@ begin
     else if (Ext = '.TLZ') then
       Result := atLzmaTar
     else if (Ext = '.ZST') then
-      Result := atZstd;
+      Result := atZstd
+    else if (Ext = '.TZST') then
+      Result := atZstdTar;
   end;
   {$IF NOT DEFINED(ExtractCabSupport)}
   if Result = atCab then

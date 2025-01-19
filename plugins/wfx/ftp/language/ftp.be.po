@@ -1,5 +1,16 @@
 msgid ""
-msgstr "Content-Type: text/plain; charset=UTF-8"
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=4; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || n%10>=5 && n%10<=9 || n%100>=11 && n%100<=14 ? 2 : 3);\n"
+"X-Crowdin-Project: b5aaebc75354984d7cee90405a1f6642\n"
+"X-Crowdin-Project-ID: 7\n"
+"X-Crowdin-Language: be\n"
+"X-Crowdin-File: /l10n_Translation/plugins/wfx/ftp/language/ftp.po\n"
+"X-Crowdin-File-ID: 3352\n"
+"Project-Id-Version: b5aaebc75354984d7cee90405a1f6642\n"
+"Language-Team: Belarusian\n"
+"Language: be_BY\n"
+"PO-Revision-Date: 2022-09-25 05:45\n"
 
 #: tdialogbox.btnadd.caption
 msgid "+"
@@ -23,41 +34,32 @@ msgstr "-"
 
 #: tdialogbox.btnok.caption
 msgid "&OK"
-msgstr "&ОК"
+msgstr "&Добра"
 
 #: tdialogbox.caption
 msgctxt "tdialogbox.caption"
 msgid "FTP"
 msgstr "FTP"
 
-#: tdialogbox.chkcopyscp.caption
-msgid "Copy using SCP protocol (faster)"
+#: tdialogbox.chkagentssh.caption
+msgid "Use SSH-agent authentication"
 msgstr ""
 
-#: tdialogbox.chkautotls.caption
-msgid "TLS"
-msgstr "TLS"
+#: tdialogbox.chkcopyscp.caption
+msgid "Copy using SCP protocol (faster)"
+msgstr "Капіяваць з дапамогай пратакола SCP (хутчэй)"
 
 #: tdialogbox.chkkeepalivetransfer.caption
 msgid "Send keepalive during a transfer"
-msgstr "Падтрымліваць злучэнне ў час перадачы"
+msgstr "Падтрымліваць злучэнне падчас перадачы"
 
 #: tdialogbox.chkmasterpassword.caption
 msgid "Use master password to protect the password"
 msgstr "Выкарыcтоўваць &галоўны пароль для абароны пароля"
 
-#: tdialogbox.chkonlyscp.caption
-msgid "Use SSH+SCP protocol (no SFTP)"
-msgstr "Выкарыcтоўваць пратакол SSH+SCP (няма SFTP)"
-
-#: tdialogbox.chkopenssh.caption
-msgctxt "tdialogbox.chkopenssh.caption"
-msgid "SSH"
-msgstr "SSH"
-
 #: tdialogbox.chkpassivemode.caption
 msgid "Use passive mode for transfers (like a WWW browser)"
-msgstr "Пасіўны рэжым &перадачы (як Web-браўзер)"
+msgstr "Пасіўны рэжым &перадачы (як вэб-браўзер)"
 
 #: tdialogbox.chkshowhidden.caption
 msgid "Use 'LIST -la' command to reveal hidden items"
@@ -69,7 +71,7 @@ msgstr "Аўтаматычна"
 
 #: tdialogbox.dividerbevel.caption
 msgid "Client certificate for authentication:"
-msgstr "Аўтэнтыфікацыя па кліенцкаму сертыфікату:"
+msgstr "Аўтэнтыфікацыя па кліенцкім сертыфікаце:"
 
 #: tdialogbox.gbftp.caption
 msgctxt "tdialogbox.gbftp.caption"
@@ -99,7 +101,7 @@ msgstr "Адправіць &загады:"
 
 #: tdialogbox.lblname.caption
 msgid "Connection name:"
-msgstr "Ім&я злучэння:"
+msgstr "&Назва злучэння:"
 
 #: tdialogbox.lblpassword.caption
 msgid "Password:"
@@ -109,13 +111,17 @@ msgstr "&Пароль:"
 msgid "Private key file (*.pem):"
 msgstr "Файл прыватнага ключа (*.pem):"
 
+#: tdialogbox.lblprotocol.caption
+msgid "Protocol:"
+msgstr "Пратакол:"
+
 #: tdialogbox.lblproxy.caption
 msgid "Use firewall (proxy server)"
 msgstr "&Выкарыcтоўваць проксі-сервер"
 
 #: tdialogbox.lblproxyhost.caption
 msgid "&Host name:"
-msgstr "Сервер [:Порт]:"
+msgstr "&Назва хоста:"
 
 #: tdialogbox.lblproxypassword.caption
 msgid "&Password:"
@@ -131,7 +137,7 @@ msgstr "Файл публічнага ключа (*.pub):"
 
 #: tdialogbox.lblremotedir.caption
 msgid "Remote dir:"
-msgstr "Aдд&алены каталог:"
+msgstr "A&длеглы каталог:"
 
 #: tdialogbox.lblusername.caption
 msgid "User name:"
@@ -143,7 +149,7 @@ msgstr "Спосаб злучэння"
 
 #: tdialogbox.tsadvanced.caption
 msgid "Advanced"
-msgstr "Пашыраныя"
+msgstr "Дадатковыя"
 
 #: tdialogbox.tsgeneral.caption
 msgid "General"
@@ -152,4 +158,8 @@ msgstr "Асноўныя"
 #: tdialogbox.tsproxy.caption
 msgid "Proxy"
 msgstr "Проксі"
+
+#: tfrmfileproperties.caption
+msgid "Properties"
+msgstr ""
 

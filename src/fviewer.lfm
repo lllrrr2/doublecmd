@@ -270,7 +270,7 @@ object frmViewer: TfrmViewer
   SessionProperties = 'Height;Width;Left;Top;WindowState'
   ShowHint = True
   ShowInTaskBar = stAlways
-  LCLVersion = '2.0.12.0'
+  LCLVersion = '2.2.7.0'
   object pnlFolder: TPanel
     Left = 179
     Height = 343
@@ -347,6 +347,17 @@ object frmViewer: TfrmViewer
       Color = clWindow
       Font.Color = clWindowText
     end
+  end
+  object pnlCode: TPanel
+    Left = 179
+    Height = 343
+    Top = 0
+    Width = 342
+    Align = alClient
+    BevelOuter = bvNone
+    ParentFont = False
+    TabOrder = 4
+    Visible = False
   end
   object pnlImage: TPanel
     Left = 179
@@ -586,11 +597,8 @@ object frmViewer: TfrmViewer
       end
       object btnUndo: TToolButton
         Left = 307
-        Hint = 'Undo'
         Top = 34
-        Enabled = False
-        ImageIndex = 20
-        OnClick = btnUndoClick
+        Action = actUndo
         ShowCaption = False
       end
       object btnPenMode: TToolButton
@@ -1234,7 +1242,6 @@ object frmViewer: TfrmViewer
       ScrollBars = ssAutoVertical
       TabOrder = 1
       TitleStyle = tsNative
-      OnDrawCell = DrawPreviewDrawCell
       OnSelection = DrawPreviewSelection
       OnTopleftChanged = DrawPreviewTopleftChanged
       ColWidths = (
@@ -1299,6 +1306,9 @@ object frmViewer: TfrmViewer
       object miSearchPrev: TMenuItem
         Action = actFindPrev
       end
+      object miGotoLine: TMenuItem
+        Action = actGotoLine
+      end
     end
     object miView: TMenuItem
       Caption = '&View'
@@ -1351,6 +1361,11 @@ object frmViewer: TfrmViewer
         GroupIndex = 1
         RadioItem = True
       end
+      object miCode: TMenuItem
+        Action = actShowCode
+        GroupIndex = 1
+        RadioItem = True
+      end
       object miDiv1: TMenuItem
         Caption = '-'
       end
@@ -1360,6 +1375,9 @@ object frmViewer: TfrmViewer
       object miShowCaret: TMenuItem
         Action = actShowCaret
       end
+    end
+    object mnuPlugins: TMenuItem
+      Caption = 'Plugins'
     end
     object miEncoding: TMenuItem
       Caption = 'En&coding'
@@ -1439,7 +1457,7 @@ object frmViewer: TfrmViewer
       Caption = '-'
     end
     object pmiSelectAll: TMenuItem
-      Caption = 'Select All'
+      Action = actSelectAll
     end
   end
   object SavePictureDialog: TSavePictureDialog
@@ -1697,6 +1715,12 @@ object frmViewer: TfrmViewer
       Caption = 'Find previous'
       OnExecute = actExecute
     end
+    object actGotoLine: TAction
+      Category = 'Edit'
+      Caption = 'Goto Line...'
+      Hint = 'Goto Line'
+      OnExecute = actExecute
+    end
     object actChangeEncoding: TAction
       Caption = 'Change encoding'
       OnExecute = actExecute
@@ -1709,13 +1733,16 @@ object frmViewer: TfrmViewer
     object actPrintSetup: TAction
       Category = 'File'
       Caption = 'Print &setup...'
+      Enabled = False
       OnExecute = actExecute
+      Visible = False
     end
     object actPrint: TAction
       Category = 'File'
       Caption = 'P&rint...'
       Enabled = False
       OnExecute = actExecute
+      Visible = False
     end
     object actShowCaret: TAction
       Category = 'View'
@@ -1730,6 +1757,20 @@ object frmViewer: TfrmViewer
     object actShowTransparency: TAction
       Category = 'Image'
       Caption = 'Show transparenc&y'
+      OnExecute = actExecute
+    end
+    object actUndo: TAction
+      Category = 'Edit'
+      Caption = 'Undo'
+      Enabled = False
+      Hint = 'Undo'
+      ImageIndex = 20
+      OnExecute = actExecute
+    end
+    object actShowCode: TAction
+      Category = 'View'
+      Caption = 'Code'
+      GroupIndex = 1
       OnExecute = actExecute
     end
   end
@@ -1776,5 +1817,16 @@ object frmViewer: TfrmViewer
   object pmTimeShow: TPopupMenu
     Left = 1088
     Top = 248
+  end
+  object pmStatusBar: TPopupMenu
+    Left = 80
+    Top = 211
+  end
+  object tmUpdateFolderSize: TTimer
+    Enabled = False
+    Interval = 500
+    OnTimer = tmUpdateFolderSizeTimer
+    Left = 196
+    Top = 232
   end
 end
